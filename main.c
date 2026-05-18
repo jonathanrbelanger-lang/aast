@@ -1,3 +1,21 @@
+/**
+ * @file main.c
+ * @brief A-AST (Accretive Abstract Syntax Tree) Core Implementation.
+ *
+ * This file contains the complete implementation of an experimental, memory-safe,
+ * and cryptographically verifiable data structure.
+ *
+ * Core Principles:
+ * 1. Immutability via Accretion: Nodes are never modified after creation.
+ *    Changes result in a new tree root via structural sharing.
+ * 2. Cryptographic Verifiability: Every node is anchored by a SHA-256 hash
+ *    of its contents and its children's hashes, creating a Merkle DAG.
+ * 3. Memory Safety: A reference counting system prevents both memory leaks
+ *    and double-free corruption in shared-node scenarios.
+ */
+
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,9 +25,9 @@
 // Upgraded to include top-down semantic pathing (keys) and string-based types.
 typedef struct Node {
     char type[16];           // e.g., "ROOT", "HEADER", "TEXT"
-    char *key;               // Semantic structural identifier (e.g., "document_root")
-    char *payload;           // The actual data value
-    struct Node **children;  // Array of pointers to child nodes
+    char *key;               // Owned by the Node. Must be freed on destruction.
+    char *payload;           // Owned by the Node. Must be freed on destruction.
+    struct Node **children;  // Owned by the Node. The array itself must be freed.
     size_t child_count;   
     size_t ref_count;   
     char hash[65];           // 64-char SHA-256 hex string + null terminator
@@ -238,18 +256,21 @@ void aast_release(Node* node) {
     }
 }
 
-// 6. The Accretion Engine (Phase 4)
+// 6. The Accretion Engine (Phase 4, with Const Correctness)
 // Recursively creates a new version of the tree with an updated payload at a specific path.
-// Replace the old accrete_recursive_helper with this ref-count-aware version.
-Node* accrete_recursive_helper(Node* current_node, const char* const* path, size_t path_index, size_t path_len, const char* new_payload) {
+Node* accrete_recursive_helper(const Node* current_node, const char* const* path, size_t path_index, size_t path_len, const char* new_payload) {
+    // Sanity checks on the read-only input node
     if (current_node == NULL || current_node->key == NULL || strcmp(current_node->key, path[path_index]) != 0) {
         return NULL;
     }
 
+    // Base Case: We have reached the target node to be "mutated".
     if (path_index == path_len - 1) {
+        // Create a new node, using data from the original, but with the new payload.
         return create_node(current_node->type, current_node->key, new_payload, current_node->children, current_node->child_count);
     }
 
+    // Recursive Step: Find the child that matches the next path segment.
     size_t target_child_index = (size_t)-1;
     const char* next_key = path[path_index + 1];
     for (size_t i = 0; i < current_node->child_count; i++) {
@@ -270,49 +291,33 @@ Node* accrete_recursive_helper(Node* current_node, const char* const* path, size
 
     Node** new_children_list = (Node**)malloc(current_node->child_count * sizeof(Node*));
     if (new_children_list == NULL) {
-        aast_release(new_child_node); // Use new release function for cleanup
+        aast_release(new_child_node);
         return NULL;
     }
     memcpy(new_children_list, current_node->children, current_node->child_count * sizeof(Node*));
     new_children_list[target_child_index] = new_child_node;
 
-    // --- REFERENCE COUNTING LOGIC ---
-    // The new parent node becomes an additional owner of all its children.
     for (size_t i = 0; i < current_node->child_count; i++) {
-        // The newly created child already has its ref_count of 1 for its new parent.
-        // We only need to retain the *unmodified, shared* siblings.
         if (i != target_child_index) {
             if (aast_retain(new_children_list[i]) != 0) {
-                // RETAIN FAILED! This is a catastrophic overflow. We must unwind.
-                // 1. Release the child we just created.
                 aast_release(new_child_node);
-                // 2. Release all siblings we successfully retained so far.
                 for (size_t j = 0; j < i; j++) {
                      if (j != target_child_index) aast_release(new_children_list[j]);
                 }
-                // 3. Free the temporary list and propagate failure.
                 free(new_children_list);
                 return NULL;
             }
         }
     }
-    // --- END REFERENCE COUNTING LOGIC ---
 
     Node* new_parent_node = create_node(current_node->type, current_node->key, current_node->payload, new_children_list, current_node->child_count);
 
     if (new_parent_node == NULL) {
-        // Parent creation failed. We must release all children in the temp list
-        // to undo the retains and prevent memory leaks.
         for (size_t i = 0; i < current_node->child_count; i++) {
             aast_release(new_children_list[i]);
         }
     }
     
-    // The old parent is not an owner of the new parent's children list.
-    // However, the *new parent* is. create_node copied the list, but it now
-    // owns the children pointers. We must release our temporary list's "ownership".
-    // This is subtle: we don't own the nodes, but we created a list that points to them.
-    // The new parent is now the owner, so we just free our list.
     free(new_children_list);
     
     return new_parent_node;
@@ -320,11 +325,11 @@ Node* accrete_recursive_helper(Node* current_node, const char* const* path, size
 
 
 // Top-level API for the Accretion Engine.
-Node* accrete_new_state(Node* root, const char* const* path, size_t path_len, const char* new_payload) {
+Node* accrete_new_state(const Node* root, const char* const* path, size_t path_len, const char* new_payload) {
     if (root == NULL || path == NULL || path_len == 0) {
         return NULL;
     }
-    // Begin the recursive accretion from the root of the tree.
+    // Begin the recursive accretion from the read-only root of the original tree.
     return accrete_recursive_helper(root, path, 0, path_len, new_payload);
 }
 
