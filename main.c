@@ -1,52 +1,98 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <openssl/evp.h>
 
-// 1. Type Definitions (Enum)
-// This maps directly to an integer under the hood, making it highly efficient.
-typedef enum {
-    ROOT = 0,
-    HEADER = 1,
-    PARAGRAPH = 2,
-    TEXT = 3
-} NodeType;
-
-// 2. The Semantic Node Structure
-// This is the blueprint for our memory blocks.
+// 1. The Semantic Node Structure
+// Upgraded to include top-down semantic pathing (keys) and string-based types.
 typedef struct Node {
-    char hash[65];             // 64 hex characters for SHA-256 + 1 for the null terminator ('\0')
-    NodeType type;
-    char* payload;             // Pointer to a character array (string)
-    struct Node** children;    // Pointer to an array of Node pointers (the branches)
-    size_t child_count;        // C needs to know exactly how many children exist in that array
+    char type[16];           // e.g., "ROOT", "HEADER", "TEXT"
+    char *key;               // Semantic structural identifier (e.g., "document_root")
+    char *payload;           // The actual data value
+    struct Node **children;  // Array of pointers to child nodes
+    size_t child_count;      
+    char hash[65];           // 64-char SHA-256 hex string + null terminator
 } Node;
 
-// 3. The Constructor
-// This function allocates memory on the Heap and locks in the data.
-Node* create_node(NodeType type, const char* payload, Node** children, size_t child_count) {
+// 2. Cryptographic Anchor (Phase 3)
+// Generates a deterministic SHA-256 hex string using OpenSSL's EVP API.
+void compute_sha256_hex(const char* data, char outputBuffer[65]) {
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    const EVP_MD *md = EVP_sha256();
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    unsigned int md_len;
+
+    EVP_DigestInit_ex(mdctx, md, NULL);
+    EVP_DigestUpdate(mdctx, data, strlen(data));
+    EVP_DigestFinal_ex(mdctx, hash, &md_len);
+    EVP_MD_CTX_free(mdctx);
+
+    for(unsigned int i = 0; i < md_len; i++) {
+        sprintf(outputBuffer + (i * 2), "%02x", hash[i]);
+    }
+    outputBuffer[64] = '\0';
+}
+
+// 3. Canonical Serialization (Phase 2)
+// Packs node data into a strict, predictable C-string to guarantee hash parity.
+char* generate_canonical_buffer(Node* node) {
+    // Dynamically calculate the required buffer size
+    size_t size = 256; // Base allowance for formatting
+    if (node->key) size += strlen(node->key);
+    if (node->payload) size += strlen(node->payload);
+    size += (node->child_count * 65); // 64 chars per child hash + comma separator
     
-    // Ask the OS for exactly enough memory to hold one Node struct
+    char* buffer = (char*)malloc(size);
+    if (!buffer) exit(1);
+    buffer[0] = '\0';
+    
+    // Format: TYPE:X|KEY:Y|CHILDREN:Z|HASHES:h1,h2|PAYLOAD:P
+    snprintf(buffer, size, "TYPE:%s|KEY:%s|CHILDREN:%zu|HASHES:", 
+             node->type, 
+             node->key ? node->key : "NULL",
+             node->child_count);
+             
+    // Append deterministic child hashes
+    for (size_t i = 0; i < node->child_count; i++) {
+        strncat(buffer, node->children[i]->hash, size - strlen(buffer) - 1);
+        if (i < node->child_count - 1) {
+            strncat(buffer, ",", size - strlen(buffer) - 1);
+        }
+    }
+    
+    // Append payload
+    strncat(buffer, "|PAYLOAD:", size - strlen(buffer) - 1);
+    if (node->payload) {
+        strncat(buffer, node->payload, size - strlen(buffer) - 1);
+    } else {
+        strncat(buffer, "NULL", size - strlen(buffer) - 1);
+    }
+    
+    return buffer;
+}
+
+// 4. The Constructor (Phase 1 + 4)
+// Allocates memory, enforces immutability via deep copies, and anchors the hash.
+Node* create_node(const char* type, const char* key, const char* payload, Node** children, size_t child_count) {
+    
     Node* new_node = (Node*)malloc(sizeof(Node));
     if (new_node == NULL) {
         fprintf(stderr, "Fatal: Memory allocation failed\n");
         exit(1);
     }
 
-    new_node->type = type;
+    // Safely lock in the type
+    strncpy(new_node->type, type, 15);
+    new_node->type[15] = '\0';
+
     new_node->child_count = child_count;
 
-    // Handle the Payload (Immutability Step)
-    // strdup allocates exact memory for the string and copies it, 
-    // ensuring the node owns its data entirely.
-    if (payload != NULL) {
-        new_node->payload = strdup(payload); 
-    } else {
-        new_node->payload = NULL;
-    }
+    // Deep copy the key and payload (Node owns this memory)
+    new_node->key = (key != NULL) ? strdup(key) : NULL;
+    new_node->payload = (payload != NULL) ? strdup(payload) : NULL;
 
-    // Handle the Children Array
+    // Handle Children Array
     if (child_count > 0 && children != NULL) {
-        // Allocate memory for an array of pointers
         new_node->children = (Node**)malloc(child_count * sizeof(Node*));
         for (size_t i = 0; i < child_count; i++) {
             new_node->children[i] = children[i];
@@ -55,64 +101,63 @@ Node* create_node(NodeType type, const char* payload, Node** children, size_t ch
         new_node->children = NULL;
     }
 
-    // Placeholder for Phase 2: Canonical Byte Packing and Hashing
-    snprintf(new_node->hash, 65, "pending_hash_computation...");
+    // Generate strict buffer and compute final Node Hash
+    char* canonical_buffer = generate_canonical_buffer(new_node);
+    compute_sha256_hex(canonical_buffer, new_node->hash);
+    
+    // Free the temporary buffer to prevent memory leaks
+    free(canonical_buffer);
 
     return new_node;
 }
 
-// Recursively free the A-AST memory (Post-Order Traversal)
+// 5. The Destructor
+// Recursively frees the A-AST memory (Post-Order Traversal)
 void free_node(Node* node) {
     if (node == NULL) return;
 
-    // 1. Free the children first
+    // 1. Free the children branches first
     if (node->child_count > 0 && node->children != NULL) {
         for (size_t i = 0; i < node->child_count; i++) {
-            free_node(node->children[i]); // Recurse down to the leaves
+            free_node(node->children[i]); 
         }
-        free(node->children); // Free the array that held the child pointers
+        free(node->children); 
     }
 
-    // 2. Free the payload (which we allocated with strdup)
-    if (node->payload != NULL) {
-        free(node->payload);
-    }
+    // 2. Free dynamic string allocations
+    if (node->key != NULL) free(node->key);
+    if (node->payload != NULL) free(node->payload);
 
     // 3. Free the node struct itself
     free(node);
 }
 
-// 4. Execution
+// 6. Execution Sandbox
 int main() {
-    // We build from the leaves up to the root (Accretion)
+    // Accretion: Building from the leaves up to the root
     
-    // Step 1: Create leaf nodes (0 children)
-    Node* text1 = create_node(TEXT, "This is an A-AST concept.", NULL, 0);
-    Node* text2 = create_node(TEXT, " It is built in C.", NULL, 0);
+    Node* text1 = create_node("TEXT", "concept_intro", "This is an A-AST concept.", NULL, 0);
+    Node* text2 = create_node("TEXT", "language_spec", "It is built in C.", NULL, 0);
 
-    // Step 2: Create a paragraph node, passing an array of the leaf pointers
     Node* paragraph_children[] = {text1, text2};
-    Node* paragraph = create_node(PARAGRAPH, NULL, paragraph_children, 2);
+    Node* paragraph = create_node("PARAGRAPH", "intro_paragraph", NULL, paragraph_children, 2);
 
-    // Step 3: Create a header node
-    Node* header_text = create_node(TEXT, "Architectural Overview", NULL, 0);
+    Node* header_text = create_node("TEXT", "header_text", "Architectural Overview", NULL, 0);
     Node* header_children[] = {header_text};
-    Node* header = create_node(HEADER, NULL, header_children, 1);
+    Node* header = create_node("HEADER", "main_header", NULL, header_children, 1);
 
-    // Step 4: Create the Root node
     Node* root_children[] = {header, paragraph};
-    Node* root = create_node(ROOT, NULL, root_children, 2);
+    Node* root = create_node("ROOT", "document_root", NULL, root_children, 2);
 
-    printf("A-AST successfully built in C memory space.\n");
-    printf("Root type: %d\n", root->type);
-    printf("Root has %zu children.\n", root->child_count);
+    printf("========================================\n");
+    printf("A-AST Sandbox Initialized\n");
+    printf("========================================\n");
+    printf("Root Key:  %s\n", root->key);
+    printf("Root Hash: %s\n", root->hash);
+    printf("Status:    Memory locked and mathematically bound.\n");
+    printf("========================================\n");
 
-    // Note: In C, we must write a free_node() function to clean up this memory.
-    // For this minimal toy step, the OS reclaims it when the program exits.
-
-// Clean up the A-AST
+    // Clean up
     free_node(root);
-    printf("Memory successfully reclaimed.\n");
-
     return 0;
 }
