@@ -2,7 +2,7 @@
 
 An experimental, content-addressable data structure written in C.
 
-Developed as an independent research initiative, the A-AST is an engineering exercise aimed at building a "ledger of intent." It explores an alternative to linear, string-based parsers by shifting structural validation from $O(N)$ parsing to an $O(1)$ cryptographic checksum. The goal is to build a structure optimized for deterministic LLM and agentic ingestion, prioritizing memory safety and clear context boundaries.
+Developed as an independent research initiative, the A-AST is an engineering exercise aimed at building a "ledger of intent." It explores an alternative to linear, string-based parsers by shifting structural validation from O(N) parsing to an O(1) cryptographic checksum. The goal is to build a structure optimized for deterministic LLM and agentic ingestion, prioritizing memory safety and clear context boundaries.
 
 ## Conceptual Foundations & Prior Art
 
