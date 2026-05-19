@@ -1,6 +1,6 @@
-# A-AST (Accretive Abstract Syntax Tree)
+# A-AST (Accretive Abstract State Tree)
 
-An experimental, content-addressable abstract syntax tree written in C. 
+An experimental, content-addressable abstract state tree written in C. 
 
 Developed as an independent research initiative under Exorobourii LLC, the A-AST explores the concept of a "ledger of intent." It aims to offer an alternative to linear, string-based parsers (like YAML or HTML) by shifting structural validation from $O(N)$ regex parsing to an $O(1)$ cryptographic checksum. The goal is to build a structure optimized for deterministic LLM and agentic ingestion, prioritizing memory safety and clear context boundaries.
 
