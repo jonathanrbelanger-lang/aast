@@ -254,6 +254,57 @@ int aast_verify_integrity(const Node* root) {
 }
 
 // ----------------------------------------------------------------------------
+// Phase 6.5: Debugging Utilities (Conditional Compilation)
+// ----------------------------------------------------------------------------
+#ifdef DEBUG_PRINT
+
+/**
+ * @brief (DEBUG ONLY) Prints a human-readable representation of the tree.
+ *
+ * This is a recursive, pre-order traversal utility for debugging. It is only
+ * compiled into the binary if the DEBUG_PRINT macro is defined at compile time
+ * (e.g., gcc -DDEBUG_PRINT).
+ *
+ * @param node The root node of the tree/subtree to print.
+ * @param indent_level The current indentation level for formatting.
+ */
+void aast_print_tree_recursive(const Node* node, int indent_level) {
+    if (node == NULL) {
+        return;
+    }
+
+    // Print indentation
+    for (int i = 0; i < indent_level; ++i) {
+        printf("  ");
+    }
+
+    // Print node details
+    printf("- Key: %-20s | Type: %-10s | Payload: %-25.25s | Hash: %.8s... | Refs: %zu\n",
+           node->key ? node->key : "NULL",
+           node->type,
+           node->payload ? node->payload : "NULL",
+           node->hash,
+           node->ref_count);
+
+    // Recurse for children
+    for (size_t i = 0; i < node->child_count; ++i) {
+        aast_print_tree_recursive(node->children[i], indent_level + 1);
+    }
+}
+
+void aast_print_tree(const Node* root) {
+    if (root == NULL) {
+        printf("A-AST is NULL.\n");
+        return;
+    }
+    printf("--- A-AST Tree View ---\n");
+    aast_print_tree_recursive(root, 0);
+    printf("-----------------------\n");
+}
+
+#endif // DEBUG_PRINT
+
+// ----------------------------------------------------------------------------
 // Phase 7: Execution Sandbox & Test Harness
 // ----------------------------------------------------------------------------
 
@@ -275,7 +326,12 @@ int main() {
     
     printf("--- State v1 Initialized ---\n");
     printf("Root v1 Hash: %s\n", root_v1->hash);
-    printf("Verifying v1 integrity... %s\n\n", aast_verify_integrity(root_v1) ? "PASSED" : "FAILED");
+    printf("Verifying v1 integrity... %s\n", aast_verify_integrity(root_v1) ? "PASSED" : "FAILED");
+
+#ifdef DEBUG_PRINT // <-- INSERTED FOR PHASE 6.5 (START)
+    aast_print_tree(root_v1);
+    printf("\n");
+#endif // <-- INSERTED FOR PHASE 6.5 (END)
 
     // --- STEP 2: Accrete New State (v2) ---
     const char* const path[] = {"document_root", "intro_paragraph", "concept_intro"};
@@ -287,10 +343,16 @@ int main() {
         printf("Root v2 Hash: %s\n", root_v2->hash);
         printf("Verifying v2 integrity... %s\n", aast_verify_integrity(root_v2) ? "PASSED" : "FAILED");
         if (root_v1->children[0] == root_v2->children[0]) {
-             printf("Structural sharing... PASSED (unmodified branch is shared)\n\n");
+             printf("Structural sharing... PASSED (unmodified branch is shared)\n");
         } else {
-             printf("Structural sharing... FAILED (unmodified branch was re-allocated)\n\n");
+             printf("Structural sharing... FAILED (unmodified branch was re-allocated)\n");
         }
+
+#ifdef DEBUG_PRINT // <-- INSERTED FOR PHASE 6.5 (START)
+        aast_print_tree(root_v2);
+        printf("\n");
+#endif // <-- INSERTED FOR PHASE 6.5 (END)
+
     } else {
         printf("Accretion failed.\n\n");
     }
@@ -314,4 +376,4 @@ int main() {
     printf("========================================\n");
 
     return 0;
-}  
+}
