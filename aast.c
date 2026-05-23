@@ -40,16 +40,23 @@ typedef struct NodeMapEntry {
 // Static Forward Declarations for Internal Helper Functions
 // ----------------------------------------------------------------------------
 
+// Primitives
 static void compute_sha256_hex(const char* data, char outputBuffer[65]);
 static char* generate_canonical_buffer(const Node* node);
+static int child_sort_by_key(ChildEntry* a, ChildEntry* b); // Moved up
+
+// Recursive Helpers for Public API
 static void aast_release_recursive(Node* node, int current_depth);
 static int aast_verify_integrity_recursive(const Node* root, int current_depth);
-static Node* accrete_recursive_helper(const Node* current_node, const char* const* path, size_t path_len, const char* new_payload);
-static Node* convert_temp_to_aast(TempNode* t_node);
-#ifdef DEBUG_PRINT
-static void aast_print_tree_recursive(const char* key, const Node* node, int indent_level);
-#endif
+static Node* accrete_recursive_helper(const Node* current_node, const char* const* path, size_t path_len, const char* new_payload); // Corrected signature
 
+// Ingestion Helpers
+static Node* convert_temp_to_aast(TempNode* t_node);
+
+// Debugging Helpers
+#ifdef DEBUG_PRINT
+static void aast_print_tree_recursive(const char* key, const Node* node, int indent_level); // Corrected signature
+#endif
 // ----------------------------------------------------------------------------
 // Cryptographic & Serialization Primitives (Internal)
 // ----------------------------------------------------------------------------
