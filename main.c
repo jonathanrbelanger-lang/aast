@@ -109,8 +109,7 @@ int aast_verify_integrity(const Node* root);
 int aast_retain(Node* node);
 void aast_release(Node* node);
 Node* accrete_recursive_helper(const Node* current_node, const char* const* path, size_t path_index, size_t path_len, const char* new_payload);
-Node* accrete_recursive_helper(...);
-Node* aast_ingest_from_text(const char* text_data); // <-- ADD THIS LINE
+Node* aast_ingest_from_text(const char* text_data);
 // ----------------------------------------------------------------------------
 // Phase 4: Core A-AST API
 // ----------------------------------------------------------------------------
