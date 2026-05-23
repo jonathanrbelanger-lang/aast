@@ -468,35 +468,129 @@ char* read_file_to_string(const char* filename) {
 }
 
 // ----------------------------------------------------------------------------
-// Phase 7: Execution Sandbox & Test Harness
+// Phase 7: Persistence API
+// ----------------------------------------------------------------------------
+
+// A struct used by uthash to track nodes that have already been visited/serialized.
+typedef struct VisitedNode {
+    char hash[65];      // The key for the hash set.
+    UT_hash_handle hh;  // This makes the structure hashable.
+} VisitedNode;
+
+/**
+ * @brief (Internal) Recursive helper to serialize the A-AST in post-order.
+ *
+ * @param node The current node to process.
+ * @param fp The file pointer to write to.
+ * @param visited_set The uthash set of already-serialized nodes.
+ * @return 0 on success, -1 on failure.
+ */
+int serialize_recursive_helper(const Node* node, FILE* fp, VisitedNode** visited_set) {
+    if (node == NULL) return 0;
+
+    // Check if we have already serialized this node (for DAGs).
+    VisitedNode* found;
+    HASH_FIND_STR(*visited_set, node->hash, found);
+    if (found) {
+        return 0; // Already processed, do not continue.
+    }
+
+    // Mark the current node as visited BEFORE recursing to prevent cycles.
+    VisitedNode* new_visited = malloc(sizeof(VisitedNode));
+    if (!new_visited) return -1; // Allocation failure
+    strcpy(new_visited->hash, node->hash);
+    HASH_ADD_STR(*visited_set, hash, new_visited);
+
+    // --- Post-Order Traversal ---
+    // First, recurse on all children. This ensures they are written to the file
+    // before their parent.
+    for (size_t i = 0; i < node->child_count; i++) {
+        if (serialize_recursive_helper(node->children[i], fp, visited_set) != 0) {
+            return -1; // Propagate failure
+        }
+    }
+
+    // --- Write Current Node ---
+    // Now that all children are guaranteed to be in the file, write this node.
+    // Format: [HASH]|[TYPE]|[KEY_LEN]:[KEY]|[PAYLOAD_LEN]:[PAYLOAD]|[CHILD_HASH_1],...
+    fprintf(fp, "%s|%s|%zu:%s|%zu:%s|",
+            node->hash,
+            node->type,
+            node->key ? strlen(node->key) : 0, node->key ? node->key : "",
+            node->payload ? strlen(node->payload) : 0, node->payload ? node->payload : ""
+    );
+
+    // Append child hashes
+    for (size_t i = 0; i < node->child_count; i++) {
+        fprintf(fp, "%s%s", node->children[i]->hash, (i < node->child_count - 1) ? "," : "");
+    }
+    fprintf(fp, "\n");
+
+    return 0;
+}
+
+/**
+ * @brief Serializes an entire A-AST to a file.
+ *
+ * The serialization is done in post-order (leaves-first) to enable
+ * single-pass deserialization.
+ *
+ * @param root The root node of the tree to serialize.
+ * @param filename The path of the file to write to.
+ * @return 0 on success, -1 on failure.
+ */
+int aast_serialize_to_file(const Node* root, const char* filename) {
+    if (!root || !filename) return -1;
+
+    FILE* fp = fopen(filename, "w");
+    if (!fp) {
+        perror("Failed to open file for serialization");
+        return -1;
+    }
+
+    // The visited_set is used to handle DAGs and avoid writing nodes multiple times.
+    VisitedNode* visited_set = NULL;
+    int result = serialize_recursive_helper(root, fp, &visited_set);
+    fclose(fp);
+
+    // Clean up the uthash set to prevent memory leaks.
+    VisitedNode *current_node, *tmp;
+    HASH_ITER(hh, visited_set, current_node, tmp) {
+        HASH_DEL(visited_set, current_node);
+        free(current_node);
+    }
+
+    if (result != 0) {
+        fprintf(stderr, "Serialization failed.\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+// ----------------------------------------------------------------------------
+// Execution Sandbox & Test Harness
 // ----------------------------------------------------------------------------
 int main() {
     printf("========================================\n");
-    printf("A-AST Ingestion Test Harness\n");
+    printf("A-AST Ingestion & Serialization Test\n");
     printf("========================================\n\n");
 
-    // --- STEP 1: Read data from file ---
-    printf("--- Reading ingest_data.txt ---\n");
+    // --- STEP 1: Read and Ingest data from file ---
+    printf("--- Ingesting data from ingest_data.txt ---\n");
     char* file_content = read_file_to_string("ingest_data.txt");
-    if (!file_content) {
-        fprintf(stderr, "Failed to read data file. Aborting.\n");
-        return 1;
-    }
-    printf("File read successfully.\n\n");
+    if (!file_content) return 1;
 
-    // --- STEP 2: Ingest text data into an A-AST ---
-    printf("--- Ingesting data into A-AST ---\n");
     Node* root = aast_ingest_from_text(file_content);
-    free(file_content); // Free the buffer now that we're done with it.
+    free(file_content);
 
     if (!root) {
         fprintf(stderr, "A-AST ingestion failed.\n");
         return 1;
     }
-    printf("Ingestion successful.\n");
-    printf("Root Hash: %s\n\n", root->hash);
+    printf("Ingestion successful. Root Hash: %s\n\n", root->hash);
 
-    // --- STEP 3: Verify and display the result ---
+    // --- STEP 2: Verify the in-memory tree ---
     printf("--- Verifying ingested tree ---\n");
     if (aast_verify_integrity(root)) {
         printf("Integrity verification... PASSED\n");
@@ -507,6 +601,16 @@ int main() {
 #ifdef DEBUG_PRINT
     aast_print_tree(root);
 #endif
+
+    // --- STEP 3: Serialize the A-AST to a new file ---
+    const char* output_filename = "aast.dat";
+    printf("\n--- Serializing tree to %s ---\n", output_filename);
+    if (aast_serialize_to_file(root, output_filename) == 0) {
+        printf("Serialization successful.\n");
+        printf("Check the contents of the '%s' file.\n", output_filename);
+    } else {
+        printf("Serialization failed.\n");
+    }
 
     // --- STEP 4: Safe Cleanup ---
     printf("\n--- Cleanup Phase ---\n");
