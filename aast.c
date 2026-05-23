@@ -613,14 +613,27 @@ Node* aast_deserialize_from_file(const char* filename) {
     }
     
     // --- 6. Final Cleanup ---
-    if (error) {
-        aast_release(root); root = NULL;
+     if (error) {
+        aast_release(root); // If we failed, release everything.
+        root = NULL;
     }
+
     NodeMapEntry *current_entry, *tmp;
+    if (root) {
+
+        HASH_FIND_STR(node_map, root->hash, current_entry);
+        if (current_entry) {
+            HASH_DEL(node_map, current_entry);
+            free(current_entry);
+        }
+    }
+    
     HASH_ITER(hh, node_map, current_entry, tmp) {
+        aast_release(current_entry->node);
         HASH_DEL(node_map, current_entry);
         free(current_entry);
     }
+    
     fclose(fp);
     if(line) free(line);
 
