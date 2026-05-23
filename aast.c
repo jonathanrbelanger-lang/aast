@@ -1,7 +1,6 @@
 #define _GNU_SOURCE // Enable POSIX extensions like strdup, strsep, and getline
 
-#include "aast.h" // Must be the first include
-
+#include "aast.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -263,7 +262,6 @@ static int aast_verify_integrity_recursive(const Node* root, int current_depth) 
         }
     }
 
-    // The rest of the function is now correct
     char* canonical_buffer = generate_canonical_buffer(root);
     if (canonical_buffer == NULL) return 0;
     char fresh_hash[65];
@@ -371,22 +369,52 @@ static void free_temp_tree(TempNode* t_node) {
 
 static Node* convert_temp_to_aast(TempNode* t_node) {
     if (t_node == NULL) return NULL;
-    Node** children_nodes = NULL;
+
+    AastChildInput* children_inputs = NULL;
+    Node* new_node = NULL;
+    int error = 0;
+
+    // --- Step 1: Recursively convert all children first (Post-Order Traversal) ---
     if (t_node->child_count > 0) {
-        children_nodes = malloc(t_node->child_count * sizeof(Node*));
-        if (children_nodes == NULL) return NULL;
+        children_inputs = malloc(t_node->child_count * sizeof(AastChildInput));
+        if (children_inputs == NULL) return NULL; // Allocation failure
+
         for (size_t i = 0; i < t_node->child_count; i++) {
-            children_nodes[i] = convert_temp_to_aast(t_node->children[i]);
-            if (children_nodes[i] == NULL) {
-                for (size_t j = 0; j < i; j++) aast_release(children_nodes[j]);
-                free(children_nodes); return NULL;
+            TempNode* temp_child = t_node->children[i];
+            
+            // Set the key for the child input
+            children_inputs[i].key = temp_child->key;
+            
+            // Recursively convert the child TempNode to a final Node*
+            children_inputs[i].child = convert_temp_to_aast(temp_child);
+            
+            if (children_inputs[i].child == NULL) {
+                // If a child conversion fails, we must clean up all previously
+                // successful conversions for this level to prevent memory leaks.
+                for (size_t j = 0; j < i; j++) {
+                    aast_release(children_inputs[j].child);
+                }
+                free(children_inputs);
+                return NULL;
             }
         }
     }
-    Node* new_node = create_node(t_node->type, t_node->key, t_node->payload, children_nodes, t_node->child_count);
-     if (children_nodes != NULL) {
-        free(children_nodes);
+
+    // --- Step 2: Create the current node using the converted children ---
+    new_node = create_node(t_node->type, t_node->payload, children_inputs, t_node->child_count);
+    
+    // --- Step 3: Cleanup ---
+    if (children_inputs != NULL) {
+        // The new_node has retained all its children. We now must release our
+        // temporary ownership of them to balance the reference counts.
+        for (size_t i = 0; i < t_node->child_count; i++) {
+            aast_release(children_inputs[i].child);
+        }
+        free(children_inputs);
     }
+    
+    // If create_node failed, new_node will be NULL, and we will return NULL.
+    // The cleanup above ensures no children were leaked in the process.
     return new_node;
 }
 
@@ -438,23 +466,52 @@ Node* aast_ingest_from_text(const char* text_data) {
 // --- Persistence API ---
 static int serialize_recursive_helper(const Node* node, FILE* fp, VisitedNode** visited_set) {
     if (node == NULL) return 0;
+
     VisitedNode* found;
     HASH_FIND_STR(*visited_set, node->hash, found);
     if (found) return 0;
+
     VisitedNode* new_visited = malloc(sizeof(VisitedNode));
     if (!new_visited) return -1;
     strcpy(new_visited->hash, node->hash);
     HASH_ADD_STR(*visited_set, hash, new_visited);
-    for (size_t i = 0; i < node->child_count; i++) {
-        if (serialize_recursive_helper(node->children[i], fp, visited_set) != 0) return -1;
+
+    ChildEntry *child_entry, *tmp;
+
+    // --- Post-Order Traversal ---
+    // First, recurse on all children.
+    HASH_ITER(hh, node->children, child_entry, tmp) {
+        if (serialize_recursive_helper(child_entry->child_node, fp, visited_set) != 0) {
+            return -1; // Propagate failure
+        }
     }
-    fprintf(fp, "%s|%s|%zu:%s|%zu:%s|", node->hash, node->type,
-        node->key ? strlen(node->key) : 0, node->key ? node->key : "",
-        node->payload ? strlen(node->payload) : 0, node->payload ? node->payload : "");
-    for (size_t i = 0; i < node->child_count; i++) {
-        fprintf(fp, "%s%s", node->children[i]->hash, (i < node->child_count - 1) ? "," : "");
+
+    // --- Write Current Node ---
+    // New Format: HASH|TYPE|PAYLOAD_LEN:PAYLOAD|CHILD_KEY_1:CHILD_HASH_1,...
+    fprintf(fp, "%s|%s|%zu:%s|",
+            node->hash,
+            node->type,
+            node->payload ? strlen(node->payload) : 0, node->payload ? node->payload : ""
+    );
+
+    // --- Sort and Append Child Data ---
+    if (node->child_count > 0) {
+        // IMPORTANT: We must sort the children by key before printing to ensure
+        // the output file is deterministic.
+        HASH_SORT(node->children, child_sort_by_key);
+
+        size_t i = 0;
+        HASH_ITER(hh, node->children, child_entry, tmp) {
+            fprintf(fp, "%s:%s%s",
+                    child_entry->key,
+                    child_entry->child_node->hash,
+                    (i < node->child_count - 1) ? "," : ""
+            );
+            i++;
+        }
     }
     fprintf(fp, "\n");
+
     return 0;
 }
 
@@ -477,57 +534,96 @@ int aast_serialize_to_file(const Node* root, const char* filename) {
 Node* aast_deserialize_from_file(const char* filename) {
     FILE* fp = fopen(filename, "r");
     if (!fp) { perror("Failed to open file for deserialization"); return NULL; }
+
     NodeMapEntry* node_map = NULL;
     Node* root = NULL;
     char* line = NULL;
     size_t len = 0;
     ssize_t read;
     int error = 0;
+
     while ((read = getline(&line, &len, fp)) != -1) {
-        char* original_line = strdup(line);
-        if(!original_line) { error = 1; break; }
-        char* line_ptr = line;
-        char* stored_hash = strsep(&line_ptr, "|");
-        char* type = strsep(&line_ptr, "|");
-        char* key_field = strsep(&line_ptr, "|");
-        char* payload_field = strsep(&line_ptr, "|");
-        char* child_hashes_str = strsep(&line_ptr, "\n");
-        if (!stored_hash || !type || !key_field || !payload_field || !child_hashes_str) { free(original_line); error = 1; break; }
-        char* key = strchr(key_field, ':') + 1;
-        char* payload = strchr(payload_field, ':') + 1;
-        Node** children = NULL;
+        if (line[read - 1] == '\n') line[read - 1] = '\0'; // Strip newline
+
+        // --- 1. Top-Level Parse ---
+        // Format: HASH|TYPE|PAYLOAD_FIELD|CHILDREN_FIELD
+        char* stored_hash = strsep(&line, "|");
+        char* type = strsep(&line, "|");
+        char* payload_field = strsep(&line, "|");
+        char* children_field = line; // Whatever is left
+
+        if (!stored_hash || !type || !payload_field) { error = 1; break; }
+
+        // --- 2. Parse Payload ---
+        char* payload = strchr(payload_field, ':');
+        if (!payload) { error = 1; break; }
+        payload++; // Move past the ':'
+
+        // --- 3. Parse Children and Build Input Array ---
+        AastChildInput* children_inputs = NULL;
         size_t child_count = 0;
-        if (strlen(child_hashes_str) > 0) {
-            char* hash_token = strtok(child_hashes_str, ",");
-            while (hash_token) {
+        
+        if (children_field && strlen(children_field) > 0) {
+            char* children_copy = strdup(children_field); // strtok is destructive
+            if (!children_copy) { error = 1; break; }
+
+            char* child_token = strtok(children_copy, ",");
+            while (child_token) {
+                char* key = strsep(&child_token, ":");
+                char* hash = child_token;
+
+                if (!key || !hash) { error = 1; break; }
+
                 NodeMapEntry* found_entry;
-                HASH_FIND_STR(node_map, hash_token, found_entry);
-                if (!found_entry) { error = 1; break; }
-                void* new_children = realloc(children, (child_count + 1) * sizeof(Node*));
-                if(!new_children) { error=1; break; }
-                children = new_children;
-                children[child_count++] = found_entry->node;
-                hash_token = strtok(NULL, ",");
+                HASH_FIND_STR(node_map, hash, found_entry);
+                if (!found_entry) { error = 1; break; } // Child not found
+
+                // Grow the input array
+                void* temp = realloc(children_inputs, (child_count + 1) * sizeof(AastChildInput));
+                if (!temp) { error = 1; break; }
+                children_inputs = temp;
+                
+                // We need to store a persistent copy of the key for create_node
+                children_inputs[child_count].key = strdup(key);
+                children_inputs[child_count].child = found_entry->node;
+                child_count++;
+
+                child_token = strtok(NULL, ",");
             }
+            free(children_copy);
         }
-        if (error) { free(children); free(original_line); break; }
-        Node* new_node = create_node(type, key[0] ? key : NULL, payload[0] ? payload : NULL, children, child_count);
-        if (!new_node) { error = 1; free(children); free(original_line); break; }
+        if (error) {
+            for(size_t i = 0; i < child_count; i++) free((void*)children_inputs[i].key);
+            free(children_inputs);
+            break;
+        }
+
+        // --- 4. Create the Node and Verify ---
+        Node* new_node = create_node(type, payload[0] ? payload : NULL, children_inputs, child_count);
+
+        // Clean up the temporary keys and input array
+        for(size_t i = 0; i < child_count; i++) free((void*)children_inputs[i].key);
+        free(children_inputs);
+        
+        if (!new_node) { error = 1; break; }
+
         if (strcmp(new_node->hash, stored_hash) != 0) {
             fprintf(stderr, "ERROR: Hash mismatch on deserialization! File is corrupt.\n");
-            aast_release(new_node); error = 1; free(children); free(original_line); break;
+            aast_release(new_node); error = 1; break;
         }
+        
+        // --- 5. Add to Map ---
         NodeMapEntry* new_entry = malloc(sizeof(NodeMapEntry));
-        if(!new_entry) { aast_release(new_node); error = 1; free(children); free(original_line); break; }
+        if(!new_entry) { aast_release(new_node); error = 1; break; }
         strcpy(new_entry->hash, new_node->hash);
         new_entry->node = new_node;
         HASH_ADD_STR(node_map, hash, new_entry);
-        root = new_node;
-        free(children);
-        free(original_line);
+        
+        root = new_node; // The last valid node created is the root
     }
+    
+    // --- 6. Final Cleanup ---
     if (error) {
-        if(line) free(line);
         aast_release(root); root = NULL;
     }
     NodeMapEntry *current_entry, *tmp;
@@ -537,9 +633,9 @@ Node* aast_deserialize_from_file(const char* filename) {
     }
     fclose(fp);
     if(line) free(line);
+
     return root;
 }
-
 
 #ifdef DEBUG_PRINT
 static void aast_print_tree_recursive(const char* key, const Node* node, int indent_level) {
