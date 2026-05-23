@@ -196,21 +196,32 @@ cleanup_fail:
 
 static void aast_release_recursive(Node* node, int current_depth) {
     if (node == NULL) return;
+
     if (current_depth >= AAST_MAX_DEPTH) {
         fprintf(stderr, "WARNING: A-AST maximum recursion depth reached during release. Halting traversal to prevent stack overflow. This will result in a memory leak for this branch.\n");
         return;
     }
+
     node->ref_count--;
     if (node->ref_count == 0) {
-        if (node->child_count > 0 && node->children != NULL) {
-            for (size_t i = 0; i < node->child_count; i++) {
-                aast_release_recursive(node->children[i], current_depth + 1);
-            }
-            free(node->children);
+        ChildEntry *current_child, *tmp;
+
+        // --- Step 1: Recursively release all child nodes ---
+        HASH_ITER(hh, node->children, current_child, tmp) {
+            aast_release_recursive(current_child->child_node, current_depth + 1);
         }
-        if (node->key != NULL) free(node->key);
-        if (node->payload != NULL) free(node->payload);
-        free(node);
+
+        // --- Step 2: Free the hash table itself ---
+        // This must be a separate loop after all children are handled.
+        HASH_ITER(hh, node->children, current_child, tmp) {
+            HASH_DEL(node->children, current_child); // Remove from hash table
+            free(current_child->key);               // Free the key string
+            free(current_child);                    // Free the ChildEntry struct
+        }
+
+        // --- Step 3: Free the node's own data ---
+        free(node->payload); // Free payload (key is no longer in Node)
+        free(node);          // Finally, free the node itself
     }
 }
 
