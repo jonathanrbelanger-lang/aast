@@ -1,3 +1,5 @@
+#define _GNU_SOURCE // Enable POSIX extensions like strdup, strsep, and getline
+
 #include "aast.h" // Must be the first include
 
 #include <stdio.h>
