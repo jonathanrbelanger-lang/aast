@@ -36,7 +36,6 @@ typedef struct NodeMapEntry {
     UT_hash_handle hh;
 } NodeMapEntry;
 
-
 // ----------------------------------------------------------------------------
 // Static Forward Declarations for Internal Helper Functions
 // ----------------------------------------------------------------------------
@@ -45,10 +44,10 @@ static void compute_sha256_hex(const char* data, char outputBuffer[65]);
 static char* generate_canonical_buffer(const Node* node);
 static void aast_release_recursive(Node* node, int current_depth);
 static int aast_verify_integrity_recursive(const Node* root, int current_depth);
-static Node* accrete_recursive_helper(const Node* current_node, const char* const* path, size_t path_index, size_t path_len, const char* new_payload);
+static Node* accrete_recursive_helper(const Node* current_node, const char* const* path, size_t path_len, const char* new_payload);
 static Node* convert_temp_to_aast(TempNode* t_node);
 #ifdef DEBUG_PRINT
-static void aast_print_tree_recursive(const Node* node, int indent_level);
+static void aast_print_tree_recursive(const char* key, const Node* node, int indent_level);
 #endif
 
 // ----------------------------------------------------------------------------
@@ -217,53 +216,46 @@ int aast_verify_integrity(const Node* root) {
 // ----------------------------------------------------------------------------
 
 static void aast_release_recursive(Node* node, int current_depth) {
-    if (node == NULL) return;
-
+    if (!node) return;
     if (current_depth >= AAST_MAX_DEPTH) {
-        fprintf(stderr, "WARNING: A-AST maximum recursion depth reached during release. Halting traversal to prevent stack overflow. This will result in a memory leak for this branch.\n");
+        fprintf(stderr, "WARNING: Max recursion depth reached...\n");
         return;
     }
-
     node->ref_count--;
     if (node->ref_count == 0) {
         ChildEntry *current_child, *tmp;
-
-        // --- Step 1: Recursively release all child nodes ---
+        // Step 1: Recursively release all child nodes
         HASH_ITER(hh, node->children, current_child, tmp) {
             aast_release_recursive(current_child->child_node, current_depth + 1);
         }
-
-        // --- Step 2: Free the hash table itself ---
-        // This must be a separate loop after all children are handled.
+        // Step 2: Free the hash table itself
         HASH_ITER(hh, node->children, current_child, tmp) {
-            HASH_DEL(node->children, current_child); // Remove from hash table
-            free(current_child->key);               // Free the key string
-            free(current_child);                    // Free the ChildEntry struct
+            HASH_DEL(node->children, current_child);
+            free(current_child->key);
+            free(current_child);
         }
-
-        // --- Step 3: Free the node's own data ---
-        free(node->payload); // Free payload (key is no longer in Node)
-        free(node);          // Finally, free the node itself
+        // Step 3: Free the node's own data
+        free(node->payload);
+        free(node);
     }
 }
 
 static int aast_verify_integrity_recursive(const Node* root, int current_depth) {
-    if (root == NULL) return 1;
+    if (!root) return 1;
     if (current_depth >= AAST_MAX_DEPTH) {
-        fprintf(stderr, "ERROR: A-AST maximum recursion depth reached during verification...\n");
+        fprintf(stderr, "ERROR: Max recursion depth reached...\n");
         return 0;
     }
-
-    // Correctly iterate through the hash table of children
     ChildEntry *child_entry, *tmp;
     HASH_ITER(hh, root->children, child_entry, tmp) {
         if (aast_verify_integrity_recursive(child_entry->child_node, current_depth + 1) == 0) {
-            return 0; // Propagate failure
+            return 0;
         }
     }
-
+    // Sort children before buffer generation for determinism
+    HASH_SORT(root->children, child_sort_by_key);
     char* canonical_buffer = generate_canonical_buffer(root);
-    if (canonical_buffer == NULL) return 0;
+    if (!canonical_buffer) return 0;
     char fresh_hash[65];
     compute_sha256_hex(canonical_buffer, fresh_hash);
     free(canonical_buffer);
@@ -461,53 +453,32 @@ Node* aast_ingest_from_text(const char* text_data) {
 
 // --- Persistence API ---
 static int serialize_recursive_helper(const Node* node, FILE* fp, VisitedNode** visited_set) {
-    if (node == NULL) return 0;
-
+    if (!node) return 0;
     VisitedNode* found;
     HASH_FIND_STR(*visited_set, node->hash, found);
     if (found) return 0;
-
     VisitedNode* new_visited = malloc(sizeof(VisitedNode));
     if (!new_visited) return -1;
     strcpy(new_visited->hash, node->hash);
     HASH_ADD_STR(*visited_set, hash, new_visited);
 
     ChildEntry *child_entry, *tmp;
-
-    // --- Post-Order Traversal ---
-    // First, recurse on all children.
     HASH_ITER(hh, node->children, child_entry, tmp) {
         if (serialize_recursive_helper(child_entry->child_node, fp, visited_set) != 0) {
-            return -1; // Propagate failure
+            return -1;
         }
     }
-
-    // --- Write Current Node ---
-    // New Format: HASH|TYPE|PAYLOAD_LEN:PAYLOAD|CHILD_KEY_1:CHILD_HASH_1,...
     fprintf(fp, "%s|%s|%zu:%s|",
-            node->hash,
-            node->type,
-            node->payload ? strlen(node->payload) : 0, node->payload ? node->payload : ""
-    );
-
-    // --- Sort and Append Child Data ---
-    if (node->child_count > 0) {
-        // IMPORTANT: We must sort the children by key before printing to ensure
-        // the output file is deterministic.
-        HASH_SORT(node->children, child_sort_by_key);
-
-        size_t i = 0;
-        HASH_ITER(hh, node->children, child_entry, tmp) {
-            fprintf(fp, "%s:%s%s",
-                    child_entry->key,
-                    child_entry->child_node->hash,
-                    (i < node->child_count - 1) ? "," : ""
-            );
-            i++;
-        }
+            node->hash, node->type,
+            node->payload ? strlen(node->payload) : 0, node->payload ? node->payload : "");
+    HASH_SORT(node->children, child_sort_by_key);
+    size_t i = 0;
+    HASH_ITER(hh, node->children, child_entry, tmp) {
+        fprintf(fp, "%s:%s%s", child_entry->key, child_entry->child_node->hash,
+                (i < node->child_count - 1) ? "," : "");
+        i++;
     }
     fprintf(fp, "\n");
-
     return 0;
 }
 
