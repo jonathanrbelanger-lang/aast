@@ -7,10 +7,6 @@
 // Public Data Structure Definition
 // ----------------------------------------------------------------------------
 
-// In aast.h
-
-// ... after the include guards and #include <stddef.h> ...
-
 /**
  * @brief Represents a key-value entry in the children hash table of a Node.
  *
