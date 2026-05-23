@@ -251,14 +251,19 @@ static void aast_release_recursive(Node* node, int current_depth) {
 static int aast_verify_integrity_recursive(const Node* root, int current_depth) {
     if (root == NULL) return 1;
     if (current_depth >= AAST_MAX_DEPTH) {
-        fprintf(stderr, "ERROR: A-AST maximum recursion depth reached during verification. Halting traversal to prevent stack overflow. Integrity cannot be confirmed.\n");
+        fprintf(stderr, "ERROR: A-AST maximum recursion depth reached during verification...\n");
         return 0;
     }
-    for (size_t i = 0; i < root->child_count; i++) {
-        if (aast_verify_integrity_recursive(root->children[i], current_depth + 1) == 0) {
-            return 0;
+
+    // Correctly iterate through the hash table of children
+    ChildEntry *child_entry, *tmp;
+    HASH_ITER(hh, root->children, child_entry, tmp) {
+        if (aast_verify_integrity_recursive(child_entry->child_node, current_depth + 1) == 0) {
+            return 0; // Propagate failure
         }
     }
+
+    // The rest of the function is now correct
     char* canonical_buffer = generate_canonical_buffer(root);
     if (canonical_buffer == NULL) return 0;
     char fresh_hash[65];
@@ -537,20 +542,29 @@ Node* aast_deserialize_from_file(const char* filename) {
 
 
 #ifdef DEBUG_PRINT
-static void aast_print_tree_recursive(const Node* node, int indent_level) {
+static void aast_print_tree_recursive(const char* key, const Node* node, int indent_level) {
     if (node == NULL) return;
+
     for (int i = 0; i < indent_level; ++i) printf("  ");
+
+    // Print the key passed from the parent, and the node's own data
     printf("- Key: %-20s | Type: %-10s | Payload: %-25.25s | Hash: %.8s... | Refs: %zu\n",
-           node->key ? node->key : "NULL", node->type,
+           key, node->type,
            node->payload ? node->payload : "NULL", node->hash, node->ref_count);
-    for (size_t i = 0; i < node->child_count; ++i) {
-        aast_print_tree_recursive(node->children[i], indent_level + 1);
+
+    // Correctly iterate through the hash table of children
+    ChildEntry *child_entry, *tmp;
+    HASH_ITER(hh, node->children, child_entry, tmp) {
+        // Pass the child's key and the child's node pointer to the recursive call
+        aast_print_tree_recursive(child_entry->key, child_entry->child_node, indent_level + 1);
     }
 }
+
 void aast_print_tree(const Node* root) {
     if (root == NULL) { printf("A-AST is NULL.\n"); return; }
     printf("--- A-AST Tree View ---\n");
-    aast_print_tree_recursive(root, 0);
+    // The root node has no key from a parent's perspective, so we pass a placeholder
+    aast_print_tree_recursive("(root)", root, 0);
     printf("-----------------------\n");
 }
 #endif // DEBUG_PRINT
