@@ -33,70 +33,43 @@ The project is being developed in discrete, verifiable phases.
     *   Added a conditionally-compiled pretty-printer for development and debugging.
 *   **Phase 6.8: Real-World Ingestion & Stress Testing**
     *   Implemented `aast_ingest_from_text` to parse a structured, indented text file.
-    *   This serves as the first stress test of the core engine with non-synthetic, externally-loaded data.
-    *   *Current state:* The full ingestion process passes Valgrind with zero memory leaks or errors, validating the robustness of the memory model under a more complex load.
-    *   *Note:* The included `ingest_data.txt` is intentionally simplified for initial validation purposes. Hardening the ingestion pipeline against real-world data complexity — including deeply nested structures, edge case payloads, and malformed input — is active future work.
+    *   This served as the first stress test of the core engine with non-synthetic, externally-loaded data.
+*   **Phases 7-8: Library Refactoring**
+    *   Formally separated the codebase into a reusable library (`aast.h`, `aast.c`) and a consumer application (`example.c`), governed by a `Makefile` with distinct debug and release targets.
+*   **Phase 8.5: Performance Hardening & Stabilization**
+    *   Replaced the O(N) child array with a `uthash`-based hash table (`ChildEntry*`), enabling near-constant-time child lookups by key and making the structure genuinely scalable for nodes with large child sets.
+    *   Updated the public API (`create_node`) to accept an array of `AastChildInput` structs, making the parent-child key relationship explicit.
+    *   Rewrote all core functions to be fully compatible with the hash-based child structure.
+    *   Resolved a use-after-free bug in the ingestion engine and a memory leak in `aast_deserialize_from_file` related to temporary node-lookup map ownership.
+    *   *Current state:* The full round-trip (ingest → serialize → deserialize → verify) passes Valgrind with zero memory errors and zero leaks, validating the robustness of the memory model under realistic load.
 
 ## Build Instructions
 
 ### Dependencies
 
 *   **OpenSSL:** Provides SHA-256 cryptographic primitives via the EVP API. Install the development headers with `sudo apt install libssl-dev` on Debian/Ubuntu systems.
-*   **uthash:** A header-only hash table library used internally for DAG traversal deduplication. No installation required — place `uthash.h` in the project root directory. Available at [https://troydhanson.github.io/uthash/](https://troydhanson.github.io/uthash/).
+*   **uthash:** A header-only hash table library used for the internal child-node map. No installation required — place `uthash.h` in the project root directory. Available at [https://troydhanson.github.io/uthash/](https://troydhanson.github.io/uthash/).
 
 ### Compile & Run
 
-```bash
-# Compile the lean, production-ready version (no debugging utilities)
-gcc -Wall -Wextra -g main.c -o aast -lcrypto
-
-# Compile the debug version with the pretty-printer included
-gcc -Wall -Wextra -g -DDEBUG_PRINT main.c -o aast_debug -lcrypto
-
-# Run the ingestion test harness through the memory sandbox
-valgrind --leak-check=full ./aast
-
-# Run the debug version of the ingestion test harness
-valgrind --leak-check=full ./aast_debug*   **Git's Object Model:** Its state management is directly inspired by Git. Like commits, new states are "accreted" by creating new nodes that point to a mix of new and existing, unmodified nodes. This preserves the full history of previous states efficiently.
-*   **Purely Functional Data Structures:** The principle of **structural sharing** is borrowed from the study of immutable data structures, notably as described in the work of Chris Okasaki. This allows for efficient "mutations" without the high cost of deep copying the entire tree for every change.
-
-## Design Philosophy
-
-*   **Immutability via Accretion:** Nodes cannot be altered once created. Modifying the tree requires accreting a new state, naturally preserving previous versions.
-*   **Cryptographic Provenance:** Each parent node's ID is a deterministic SHA-256 hash of its attributes and its children's hashes. This makes the entire structure content-addressable and verifiable.
-*   **Agent-First, Human-Readable Second:** Traditional data formats often prioritize human readability. The A-AST prioritizes mathematical determinism for machine ingestion. The goal is to provide a structure that an AI agent can trust and verify with a single cryptographic check, minimizing ambiguity and parsing overhead. Human-debugging utilities, like the tree pretty-printer, are considered secondary and are compiled conditionally, ensuring they add **zero overhead** to a production build.
-
-## Execution state & verification
-
-The project is being developed in discrete, verifiable phases.
-
-*   **Phases 1-3.5: Core Structure & Hardened Serialization**
-    *   Implemented the core `Node` struct, cryptographic anchoring with OpenSSL's EVP API, and a hardened, length-prefixed canonical buffer format.
-*   **Phase 4: Accretion Engine**
-    *   Implemented `accrete_new_state` to enable "mutations" via structural sharing, inspired by functional programming principles.
-*   **Phase 5: Memory Management**
-    *   Built a robust reference counting system (`aast_retain`, `aast_release`) to prevent memory leaks and double-free corruption when multiple tree states share common nodes.
-*   **Phase 6-6.5: Verification & Debugging**
-    *   Implemented `aast_verify_integrity` to validate the Merkle DAG and detect in-memory tampering.
-    *   Added a conditionally-compiled pretty-printer for development and debugging.
-*   **Phase 6.8: Real-World Ingestion & Stress Testing**
-    *   Implemented `aast_ingest_from_text` to parse a structured, indented text file.
-    *   This serves as the first stress test of the core engine with non-synthetic, externally-loaded data.
-    *   *Current state:* The full ingestion process passes Valgrind with zero memory leaks or errors, validating the robustness of the memory model under a more complex load.
-
-## Build instructions
-
-To compile locally, ensure you have the OpenSSL development headers installed (e.g., `libssl-dev` on Debian/Ubuntu). You will also need to create an `ingest_data.txt` file in the root directory for the test harness to run.
+The project is built via `make`. The `Makefile` produces two targets: a lean production binary and a debug binary with the conditionally-compiled pretty-printer enabled.
 
 ```bash
-# Compile the lean, production-ready version (no debugging utilities)
-gcc -Wall -Wextra -g main.c -o aast -lcrypto
+# Build both targets
+make
 
-# Compile the debug version with the pretty-printer included
-gcc -Wall -Wextra -g -DDEBUG_PRINT main.c -o aast_debug -lcrypto
+# Build only the production binary
+make example_aast
 
-# Run the ingestion test harness through the memory sandbox
-valgrind --leak-check=full ./aast
+# Build only the debug binary (enables DEBUG_PRINT)
+make example_aast_debug
 
-# Run the debug version of the ingestion test harness
-valgrind --leak-check=full ./aast_debug
+# Run the production binary through the memory sandbox
+valgrind --leak-check=full ./example_aast
+
+# Run the debug binary
+valgrind --leak-check=full ./example_aast_debug
+
+# Remove all build artifacts
+make clean
+```
