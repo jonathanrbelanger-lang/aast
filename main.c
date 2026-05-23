@@ -449,6 +449,24 @@ Node* aast_ingest_from_text(const char* text_data) {
     return final_root;
 }
 
+// Utility to read an entire file into a string.
+char* read_file_to_string(const char* filename) {
+    FILE* file = fopen(filename, "r");
+    if (!file) {
+        perror("Error opening file");
+        return NULL;
+    }
+    fseek(file, 0, SEEK_END);
+    long length = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    char* buffer = malloc(length + 1);
+    if (!buffer) return NULL;
+    fread(buffer, 1, length, file);
+    buffer[length] = '\0';
+    fclose(file);
+    return buffer;
+}
+
 // ----------------------------------------------------------------------------
 // Phase 7: Execution Sandbox & Test Harness
 // ----------------------------------------------------------------------------
