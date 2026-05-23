@@ -2,3 +2,7 @@ aast
 *.o
 .vscode/
 *.swp
+example_aast
+example_aast_debug
+aast.dat
+*.o
