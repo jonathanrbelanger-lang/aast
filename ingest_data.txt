@@ -1,0 +1,9 @@
+document_root:ROOT
+  main_header:HEADER
+    title:TEXT:A-AST Project Overview
+    version:TEXT:1.0
+  body:BODY
+    intro_paragraph:PARAGRAPH
+      p1_text:TEXT:This is the first sentence.
+      p2_text:TEXT:This is the second.
+    conclusion:TEXT:End of document.
