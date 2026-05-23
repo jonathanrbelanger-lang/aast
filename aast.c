@@ -520,72 +520,85 @@ Node* aast_deserialize_from_file(const char* filename) {
     int error = 0;
 
     while ((read = getline(&line, &len, fp)) != -1) {
-        if (line[read - 1] == '\n') line[read - 1] = '\0'; // Strip newline
+        // --- 1. Use safe pointers, do not modify the original line buffer ---
+        char* current = line;
+        char* end = line + read;
 
-        // --- 1. Top-Level Parse ---
-        // Format: HASH|TYPE|PAYLOAD_FIELD|CHILDREN_FIELD
-        char* stored_hash = strsep(&line, "|");
-        char* type = strsep(&line, "|");
-        char* payload_field = strsep(&line, "|");
-        char* children_field = line; // Whatever is left
+        // --- 2. Extract tokens by finding delimiters manually ---
+        char* token_end;
 
-        if (!stored_hash || !type || !payload_field) { error = 1; break; }
+        // HASH
+        token_end = strchr(current, '|');
+        if (!token_end) { error = 1; break; }
+        char stored_hash[65];
+        strncpy(stored_hash, current, token_end - current);
+        stored_hash[token_end - current] = '\0';
+        current = token_end + 1;
 
-        // --- 2. Parse Payload ---
-        char* payload = strchr(payload_field, ':');
-        if (!payload) { error = 1; break; }
-        payload++; // Move past the ':'
+        // TYPE
+        token_end = strchr(current, '|');
+        if (!token_end) { error = 1; break; }
+        char type[17];
+        strncpy(type, current, token_end - current);
+        type[token_end - current] = '\0';
+        current = token_end + 1;
+        
+        // PAYLOAD
+        token_end = strchr(current, '|');
+        if (!token_end) { error = 1; break; }
+        char* payload_len_str = current;
+        char* payload_str = strchr(payload_len_str, ':');
+        if (!payload_str || payload_str > token_end) { error = 1; break; }
+        payload_str++; // move past ':'
+        size_t payload_len = token_end - payload_str;
+        char payload[payload_len + 1];
+        strncpy(payload, payload_str, payload_len);
+        payload[payload_len] = '\0';
+        current = token_end + 1;
 
         // --- 3. Parse Children and Build Input Array ---
         AastChildInput* children_inputs = NULL;
         size_t child_count = 0;
-        
-        if (children_field && strlen(children_field) > 0) {
-            char* children_copy = strdup(children_field); // strtok is destructive
-            if (!children_copy) { error = 1; break; }
+        char* children_field = current;
+        if (strchr(children_field, '\n')) *strchr(children_field, '\n') = '\0'; // Safely strip newline
 
-            char* child_token = strtok(children_copy, ",");
-            while (child_token) {
+        if (strlen(children_field) > 0) {
+            char* children_copy = strdup(children_field);
+            char* p_child = children_copy;
+            char* child_token;
+            while((child_token = strsep(&p_child, ",")) != NULL) {
                 char* key = strsep(&child_token, ":");
                 char* hash = child_token;
-
                 if (!key || !hash) { error = 1; break; }
 
                 NodeMapEntry* found_entry;
                 HASH_FIND_STR(node_map, hash, found_entry);
-                if (!found_entry) { error = 1; break; } // Child not found
-
-                // Grow the input array
+                if (!found_entry) { error = 1; break; }
+                
                 void* temp = realloc(children_inputs, (child_count + 1) * sizeof(AastChildInput));
                 if (!temp) { error = 1; break; }
                 children_inputs = temp;
                 
-                // We need to store a persistent copy of the key for create_node
                 children_inputs[child_count].key = strdup(key);
                 children_inputs[child_count].child = found_entry->node;
                 child_count++;
-
-                child_token = strtok(NULL, ",");
             }
             free(children_copy);
         }
         if (error) {
-            for(size_t i = 0; i < child_count; i++) free((void*)children_inputs[i].key);
-            free(children_inputs);
-            break;
+             for(size_t i = 0; i < child_count; i++) free((void*)children_inputs[i].key);
+             free(children_inputs);
+             break;
         }
 
-        // --- 4. Create the Node and Verify ---
+        // --- 4. Create Node & Verify ---
         Node* new_node = create_node(type, payload[0] ? payload : NULL, children_inputs, child_count);
 
-        // Clean up the temporary keys and input array
         for(size_t i = 0; i < child_count; i++) free((void*)children_inputs[i].key);
         free(children_inputs);
         
         if (!new_node) { error = 1; break; }
-
         if (strcmp(new_node->hash, stored_hash) != 0) {
-            fprintf(stderr, "ERROR: Hash mismatch on deserialization! File is corrupt.\n");
             aast_release(new_node); error = 1; break;
         }
         
@@ -596,7 +609,7 @@ Node* aast_deserialize_from_file(const char* filename) {
         new_entry->node = new_node;
         HASH_ADD_STR(node_map, hash, new_entry);
         
-        root = new_node; // The last valid node created is the root
+        root = new_node;
     }
     
     // --- 6. Final Cleanup ---
