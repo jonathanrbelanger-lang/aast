@@ -34,8 +34,6 @@ typedef struct Node {
     char hash[65];           // The SHA-256 hex string that uniquely identifies this node's state.
 } Node;
 
-// NOTE: The function prototypes below this in aast.h DO NOT need to change yet.
-// However, their implementations will break until we complete the refactoring.
 // ----------------------------------------------------------------------------
 // Public API Function Prototypes
 // ----------------------------------------------------------------------------
