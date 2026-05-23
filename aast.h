@@ -1,6 +1,7 @@
 #ifndef AAST_H
 #define AAST_H
 #include <stddef.h> // For size_t
+#include "uthash.h"
 // ----------------------------------------------------------------------------
 // Public Data Structure Definition
 // ----------------------------------------------------------------------------
