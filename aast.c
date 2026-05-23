@@ -372,25 +372,23 @@ static Node* convert_temp_to_aast(TempNode* t_node) {
 
     AastChildInput* children_inputs = NULL;
     Node* new_node = NULL;
-    int error = 0;
 
     // --- Step 1: Recursively convert all children first (Post-Order Traversal) ---
     if (t_node->child_count > 0) {
         children_inputs = malloc(t_node->child_count * sizeof(AastChildInput));
-        if (children_inputs == NULL) return NULL; // Allocation failure
+        if (children_inputs == NULL) return NULL;
 
         for (size_t i = 0; i < t_node->child_count; i++) {
             TempNode* temp_child = t_node->children[i];
             
-            // Set the key for the child input
+            // Set the key for the child input from the TempNode
             children_inputs[i].key = temp_child->key;
             
             // Recursively convert the child TempNode to a final Node*
             children_inputs[i].child = convert_temp_to_aast(temp_child);
             
             if (children_inputs[i].child == NULL) {
-                // If a child conversion fails, we must clean up all previously
-                // successful conversions for this level to prevent memory leaks.
+                // Cleanup on failure
                 for (size_t j = 0; j < i; j++) {
                     aast_release(children_inputs[j].child);
                 }
@@ -401,20 +399,18 @@ static Node* convert_temp_to_aast(TempNode* t_node) {
     }
 
     // --- Step 2: Create the current node using the converted children ---
+    // The node itself no longer has a 'key' parameter in create_node
     new_node = create_node(t_node->type, t_node->payload, children_inputs, t_node->child_count);
     
     // --- Step 3: Cleanup ---
     if (children_inputs != NULL) {
-        // The new_node has retained all its children. We now must release our
-        // temporary ownership of them to balance the reference counts.
+        // Release the temporary ownership of the children
         for (size_t i = 0; i < t_node->child_count; i++) {
             aast_release(children_inputs[i].child);
         }
         free(children_inputs);
     }
     
-    // If create_node failed, new_node will be NULL, and we will return NULL.
-    // The cleanup above ensures no children were leaked in the process.
     return new_node;
 }
 
