@@ -285,8 +285,7 @@ static Node* convert_temp_to_aast(TempNode* t_node) {
         }
     }
     Node* new_node = create_node(t_node->type, t_node->key, t_node->payload, children_nodes, t_node->child_count);
-    if (children_nodes != NULL) {
-        for (size_t i = 0; i < t_node->child_count; i++) aast_release(children_nodes[i]);
+     if (children_nodes != NULL) {
         free(children_nodes);
     }
     return new_node;
