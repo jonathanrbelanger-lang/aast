@@ -109,6 +109,8 @@ int aast_verify_integrity(const Node* root);
 int aast_retain(Node* node);
 void aast_release(Node* node);
 Node* accrete_recursive_helper(const Node* current_node, const char* const* path, size_t path_index, size_t path_len, const char* new_payload);
+Node* accrete_recursive_helper(...);
+Node* aast_ingest_from_text(const char* text_data); // <-- ADD THIS LINE
 // ----------------------------------------------------------------------------
 // Phase 4: Core A-AST API
 // ----------------------------------------------------------------------------
@@ -305,73 +307,192 @@ void aast_print_tree(const Node* root) {
 #endif // DEBUG_PRINT
 
 // ----------------------------------------------------------------------------
-// Phase 7: Execution Sandbox & Test Harness
+// Phase 6.8: Ingestion Engine
 // ----------------------------------------------------------------------------
 
-int main() {
-    printf("========================================\n");
-    printf("A-AST Test Harness Initialized\n");
-    printf("========================================\n\n");
+// A temporary, mutable node structure used only during parsing.
+typedef struct TempNode {
+    char* key;
+    char* type;
+    char* payload;
+    struct TempNode* parent;
+    struct TempNode** children;
+    size_t child_count;
+    size_t child_capacity;
+} TempNode;
 
-    // --- STEP 1: Build Initial State (v1) ---
-    Node* text1 = create_node("TEXT", "concept_intro", "This is an A-AST concept.", NULL, 0);
-    Node* text2 = create_node("TEXT", "language_spec", "It is built in C.", NULL, 0);
-    Node* paragraph_children[] = {text1, text2};
-    Node* paragraph = create_node("PARAGRAPH", "intro_paragraph", NULL, paragraph_children, 2);
-    Node* header_text = create_node("TEXT", "header_text", "Architectural Overview", NULL, 0);
-    Node* header_children[] = {header_text};
-    Node* header = create_node("HEADER", "main_header", NULL, header_children, 1);
-    Node* root_children[] = {header, paragraph};
-    Node* root_v1 = create_node("ROOT", "document_root", NULL, root_children, 2);
-    
-    printf("--- State v1 Initialized ---\n");
-    printf("Root v1 Hash: %s\n", root_v1->hash);
-    printf("Verifying v1 integrity... %s\n", aast_verify_integrity(root_v1) ? "PASSED" : "FAILED");
+// Helper to add a child to a TempNode, handling dynamic array resizing.
+int add_child_to_temp_node(TempNode* parent, TempNode* child) {
+    if (parent->child_count >= parent->child_capacity) {
+        size_t new_capacity = (parent->child_capacity == 0) ? 8 : parent->child_capacity * 2;
+        Node** new_children = realloc(parent->children, new_capacity * sizeof(TempNode*));
+        if (new_children == NULL) return -1;
+        parent->children = (TempNode**)new_children;
+        parent->child_capacity = new_capacity;
+    }
+    parent->children[parent->child_count++] = child;
+    child->parent = parent;
+    return 0;
+}
 
-#ifdef DEBUG_PRINT // <-- INSERTED FOR PHASE 6.5 (START)
-    aast_print_tree(root_v1);
-    printf("\n");
-#endif // <-- INSERTED FOR PHASE 6.5 (END)
+// Recursively frees the entire temporary tree.
+void free_temp_tree(TempNode* t_node) {
+    if (t_node == NULL) return;
+    for (size_t i = 0; i < t_node->child_count; i++) {
+        free_temp_tree(t_node->children[i]);
+    }
+    free(t_node->key);
+    free(t_node->type);
+    free(t_node->payload);
+    free(t_node->children);
+    free(t_node);
+}
 
-    // --- STEP 2: Accrete New State (v2) ---
-    const char* const path[] = {"document_root", "intro_paragraph", "concept_intro"};
-    const char* new_payload = "This is the NEW, updated payload.";
-    Node* root_v2 = accrete_new_state(root_v1, path, 3, new_payload);
+// Recursively converts the mutable TempNode tree to an immutable A-AST (post-order).
+Node* convert_temp_to_aast(TempNode* t_node) {
+    if (t_node == NULL) return NULL;
 
-    printf("--- State v2 Accreted ---\n");
-    if (root_v2) {
-        printf("Root v2 Hash: %s\n", root_v2->hash);
-        printf("Verifying v2 integrity... %s\n", aast_verify_integrity(root_v2) ? "PASSED" : "FAILED");
-        if (root_v1->children[0] == root_v2->children[0]) {
-             printf("Structural sharing... PASSED (unmodified branch is shared)\n");
-        } else {
-             printf("Structural sharing... FAILED (unmodified branch was re-allocated)\n");
+    Node** children_nodes = NULL;
+    if (t_node->child_count > 0) {
+        children_nodes = malloc(t_node->child_count * sizeof(Node*));
+        if (children_nodes == NULL) return NULL;
+
+        for (size_t i = 0; i < t_node->child_count; i++) {
+            children_nodes[i] = convert_temp_to_aast(t_node->children[i]);
+            if (children_nodes[i] == NULL) {
+                // Cleanup on failure: release all previously created children
+                for (size_t j = 0; j < i; j++) aast_release(children_nodes[j]);
+                free(children_nodes);
+                return NULL;
+            }
         }
-
-#ifdef DEBUG_PRINT // <-- INSERTED FOR PHASE 6.5 (START)
-        aast_print_tree(root_v2);
-        printf("\n");
-#endif // <-- INSERTED FOR PHASE 6.5 (END)
-
-    } else {
-        printf("Accretion failed.\n\n");
     }
 
-    // --- STEP 3: Demonstrate Tampering Detection ---
-    printf("--- Tampering Simulation ---\n");
-    printf("Manually corrupting 'text2' payload without re-hashing...\n");
-    // Direct memory manipulation like this is what the A-AST is designed to detect.
-    strcpy(text2->payload, "CORRUPTED DATA!");
-    printf("Verifying v1 integrity after tamper... %s\n", aast_verify_integrity(root_v1) ? "FAILED (UNEXPECTED PASS)" : "PASSED (Tampering Detected)");
-    printf("Verifying v2 integrity after tamper... %s\n\n", aast_verify_integrity(root_v2) ? "FAILED (UNEXPECTED PASS)" : "PASSED (Tampering Detected)");
+    Node* new_node = create_node(t_node->type, t_node->key, t_node->payload, children_nodes, t_node->child_count);
+    
+    // After create_node, new_node owns the children. We must release our temporary hold.
+    if (children_nodes != NULL) {
+        for (size_t i = 0; i < t_node->child_count; i++) {
+             // Retain is needed because the new parent owns them, and if we create a new state, we need to add a ref count
+            if(new_node) aast_retain(children_nodes[i]);
+            aast_release(children_nodes[i]);
+        }
+        free(children_nodes);
+    }
 
+
+    return new_node;
+}
+
+// Main ingestion function: parses indented text into a final, valid A-AST.
+Node* aast_ingest_from_text(const char* text_data) {
+    TempNode* temp_root = calloc(1, sizeof(TempNode));
+    if (!temp_root) return NULL;
+
+    TempNode* current_parent = temp_root;
+    int prev_indent = -2; // Start at a value that allows 0 indent
+
+    char* text_copy = strdup(text_data);
+    char* line = strtok(text_copy, "\n");
+
+    while (line != NULL) {
+        char* line_start = line;
+        while (*line_start == ' ') line_start++;
+        
+        int current_indent = line_start - line;
+        if (current_indent % 2 != 0) {
+            fprintf(stderr, "ERROR: Invalid indentation of %d spaces.\n", current_indent);
+            free_temp_tree(temp_root); free(text_copy); return NULL;
+        }
+
+        if (current_indent > prev_indent + 2) {
+            fprintf(stderr, "ERROR: Indentation jumped more than one level.\n");
+            free_temp_tree(temp_root); free(text_copy); return NULL;
+        }
+        
+        while (current_indent <= prev_indent) {
+            current_parent = current_parent->parent;
+            prev_indent -= 2;
+        }
+
+        // Parse key:TYPE:payload
+        char* key = strsep(&line_start, ":");
+        char* type = strsep(&line_start, ":");
+        char* payload = line_start; // Whatever is left
+
+        if (!key || !type) {
+             fprintf(stderr, "ERROR: Malformed line. Expected key:TYPE.\n");
+             free_temp_tree(temp_root); free(text_copy); return NULL;
+        }
+
+        TempNode* new_temp_node = calloc(1, sizeof(TempNode));
+        new_temp_node->key = strdup(key);
+        new_temp_node->type = strdup(type);
+        if (payload) new_temp_node->payload = strdup(payload);
+
+        add_child_to_temp_node(current_parent, new_temp_node);
+        current_parent = new_temp_node;
+        prev_indent = current_indent;
+        
+        line = strtok(NULL, "\n");
+    }
+    
+    free(text_copy);
+
+    // Convert the single child of the dummy root to the final A-AST
+    Node* final_root = NULL;
+    if (temp_root->child_count == 1) {
+        final_root = convert_temp_to_aast(temp_root->children[0]);
+    }
+    
+    free_temp_tree(temp_root);
+    return final_root;
+}
+
+// ----------------------------------------------------------------------------
+// Phase 7: Execution Sandbox & Test Harness
+// ----------------------------------------------------------------------------
+int main() {
+    printf("========================================\n");
+    printf("A-AST Ingestion Test Harness\n");
+    printf("========================================\n\n");
+
+    // --- STEP 1: Read data from file ---
+    printf("--- Reading ingest_data.txt ---\n");
+    char* file_content = read_file_to_string("ingest_data.txt");
+    if (!file_content) {
+        fprintf(stderr, "Failed to read data file. Aborting.\n");
+        return 1;
+    }
+    printf("File read successfully.\n\n");
+
+    // --- STEP 2: Ingest text data into an A-AST ---
+    printf("--- Ingesting data into A-AST ---\n");
+    Node* root = aast_ingest_from_text(file_content);
+    free(file_content); // Free the buffer now that we're done with it.
+
+    if (!root) {
+        fprintf(stderr, "A-AST ingestion failed.\n");
+        return 1;
+    }
+    printf("Ingestion successful.\n");
+    printf("Root Hash: %s\n\n", root->hash);
+
+    // --- STEP 3: Verify and display the result ---
+    printf("--- Verifying ingested tree ---\n");
+    if (aast_verify_integrity(root)) {
+        printf("Integrity verification... PASSED\n");
+    } else {
+        printf("Integrity verification... FAILED\n");
+    }
+
+#ifdef DEBUG_PRINT
+    aast_print_tree(root);
+#endif
 
     // --- STEP 4: Safe Cleanup ---
-    printf("--- Cleanup Phase ---\n");
-    printf("Releasing root_v2...\n");
-    aast_release(root_v2);
-    printf("Releasing root_v1...\n");
-    aast_release(root_v1);
+    printf("\n--- Cleanup Phase ---\n");
+    aast_release(root);
     printf("Cleanup complete.\n");
     printf("========================================\n");
 
