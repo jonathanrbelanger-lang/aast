@@ -259,7 +259,9 @@ static int aast_verify_integrity_recursive(const Node* root, int current_depth) 
         }
     }
     // Sort children before buffer generation for determinism
-    HASH_SORT((ChildEntry*)root->children, child_sort_by_key);
+    Node* mutable_node = (Node*)root;
+    HASH_SORT(mutable_node->children, child_sort_by_key);
+    
     char* canonical_buffer = generate_canonical_buffer(root);
     if (!canonical_buffer) return 0;
     char fresh_hash[65];
@@ -477,7 +479,9 @@ static int serialize_recursive_helper(const Node* node, FILE* fp, VisitedNode** 
     fprintf(fp, "%s|%s|%zu:%s|",
             node->hash, node->type,
             node->payload ? strlen(node->payload) : 0, node->payload ? node->payload : "");
-    HASH_SORT((ChildEntry*)node->children, child_sort_by_key);
+    Node* mutable_node = (Node*)node;
+    HASH_SORT(mutable_node->children, child_sort_by_key);
+
     size_t i = 0;
     HASH_ITER(hh, node->children, child_entry, tmp) {
         fprintf(fp, "%s:%s%s", child_entry->key, child_entry->child_node->hash,
