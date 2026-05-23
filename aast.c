@@ -142,7 +142,7 @@ Node* create_node(const char* type, const char* payload, const AastChildInput* c
         new_node->payload = strdup(payload);
         if (new_node->payload == NULL) { free(new_node); return NULL; }
     }
-
+    
     // --- Build the children hash table ---
     for (size_t i = 0; i < child_count; i++) {
         ChildEntry* new_entry = (ChildEntry*)malloc(sizeof(ChildEntry));
@@ -188,6 +188,29 @@ cleanup_fail:
         free(new_node);
     }
     return NULL;
+}
+
+void aast_release(Node* node) {
+    aast_release_recursive(node, 0);
+}
+
+int aast_retain(Node* node) {
+    if (node == NULL) return 0;
+    if (node->ref_count == SIZE_MAX) return -1;
+    node->ref_count++;
+    return 0;
+}
+
+Node* accrete_new_state(const Node* root, const char* const* path, size_t path_len, const char* new_payload) {
+    if (!root || !path || path_len == 0) {
+        return NULL;
+    }
+    // This public function simply acts as a safe entry point to the recursive helper.
+    return accrete_recursive_helper(root, path, path_len, new_payload);
+}
+
+int aast_verify_integrity(const Node* root) {
+    return aast_verify_integrity_recursive(root, 0);
 }
 
 // ----------------------------------------------------------------------------
@@ -244,36 +267,73 @@ static int aast_verify_integrity_recursive(const Node* root, int current_depth) 
     return (strcmp(root->hash, fresh_hash) == 0);
 }
 
-static Node* accrete_recursive_helper(const Node* current_node, const char* const* path, size_t path_index, size_t path_len, const char* new_payload) {
-    if (current_node == NULL || current_node->key == NULL || strcmp(current_node->key, path[path_index]) != 0) return NULL;
-    if (path_index == path_len - 1) return create_node(current_node->type, current_node->key, new_payload, current_node->children, current_node->child_count);
-    size_t target_child_index = (size_t)-1;
-    for (size_t i = 0; i < current_node->child_count; i++) {
-        if (current_node->children[i] != NULL && current_node->children[i]->key != NULL && strcmp(current_node->children[i]->key, path[path_index + 1]) == 0) {
-            target_child_index = i; break;
-        }
-    }
-    if (target_child_index == (size_t)-1) return NULL;
-    Node* new_child_node = accrete_recursive_helper(current_node->children[target_child_index], path, path_index + 1, path_len, new_payload);
-    if (new_child_node == NULL) return NULL;
-    Node** new_children_list = (Node**)malloc(current_node->child_count * sizeof(Node*));
-    if (new_children_list == NULL) { aast_release(new_child_node); return NULL; }
-    memcpy(new_children_list, current_node->children, current_node->child_count * sizeof(Node*));
-    new_children_list[target_child_index] = new_child_node;
-    for (size_t i = 0; i < current_node->child_count; i++) {
-        if (i != target_child_index) {
-            if (aast_retain(new_children_list[i]) != 0) {
-                aast_release(new_child_node);
-                for (size_t j = 0; j < i; j++) { if (j != target_child_index) aast_release(new_children_list[j]); }
-                free(new_children_list); return NULL;
+static Node* accrete_recursive_helper(const Node* current_node, const char* const* path, size_t path_len, const char* new_payload) {
+    if (!current_node) return NULL;
+
+    // Base Case: If the path is empty, we are at the target node. Recreate it with the new payload.
+    if (path_len == 0) {
+        // To recreate this node, we must gather its children's info into an AastChildInput array.
+        AastChildInput* children_inputs = NULL;
+        if (current_node->child_count > 0) {
+            children_inputs = malloc(current_node->child_count * sizeof(AastChildInput));
+            if (!children_inputs) return NULL;
+            
+            ChildEntry* child_entry, *tmp;
+            size_t i = 0;
+            HASH_ITER(hh, current_node->children, child_entry, tmp) {
+                children_inputs[i].key = child_entry->key;
+                children_inputs[i].child = child_entry->child_node;
+                i++;
             }
         }
+        
+        Node* new_node = create_node(current_node->type, new_payload, children_inputs, current_node->child_count);
+        free(children_inputs);
+        return new_node;
     }
-    Node* new_parent_node = create_node(current_node->type, current_node->key, current_node->payload, new_children_list, current_node->child_count);
-    if (new_parent_node == NULL) {
-        for (size_t i = 0; i < current_node->child_count; i++) aast_release(new_children_list[i]);
+
+    // Recursive Step: We need to go deeper.
+    const char* next_key = path[0];
+    ChildEntry* child_to_follow = NULL;
+    HASH_FIND_STR(current_node->children, next_key, child_to_follow);
+
+    if (!child_to_follow) {
+        return NULL; // Invalid path, child not found.
     }
-    free(new_children_list);
+
+    // Recurse down the path. This will return a pointer to a *new* child node.
+    Node* new_child_node = accrete_recursive_helper(child_to_follow->child_node, &path[1], path_len - 1, new_payload);
+    
+    if (!new_child_node) {
+        return NULL; // Lower-level recursion failed.
+    }
+
+    // --- Accretion: Rebuild the current node with the new child ---
+    AastChildInput* parent_children_inputs = malloc(current_node->child_count * sizeof(AastChildInput));
+    if (!parent_children_inputs) {
+        aast_release(new_child_node);
+        return NULL;
+    }
+
+    ChildEntry* sibling_entry, *tmp;
+    size_t i = 0;
+    HASH_ITER(hh, current_node->children, sibling_entry, tmp) {
+        if (strcmp(sibling_entry->key, next_key) == 0) {
+            parent_children_inputs[i].key = next_key;
+            parent_children_inputs[i].child = new_child_node;
+        } else {
+            parent_children_inputs[i].key = sibling_entry->key;
+            parent_children_inputs[i].child = sibling_entry->child_node;
+        }
+        i++;
+    }
+
+    Node* new_parent_node = create_node(current_node->type, current_node->payload, parent_children_inputs, current_node->child_count);
+
+    free(parent_children_inputs);
+    // Release our temporary ownership of new_child_node, as it's now owned by new_parent_node.
+    aast_release(new_child_node);
+
     return new_parent_node;
 }
 
