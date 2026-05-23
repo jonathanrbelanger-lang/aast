@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <openssl/evp.h>
+#include "uthash.h"
 
 // ----------------------------------------------------------------------------
 // Phase 1: Core Data Structure
