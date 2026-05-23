@@ -27,15 +27,18 @@ The project is being developed in discrete, verifiable phases.
 *   **Phase 4: Accretion Engine**
     *   Implemented `accrete_new_state` to enable "mutations" via structural sharing, inspired by functional programming principles.
 *   **Phase 5: Memory Management**
-    *   Built a robust reference counting system (`aast_retain`, `aast_release`) to prevent memory leaks and double-free corruption in shared-node scenarios.
+    *   Built a robust reference counting system (`aast_retain`, `aast_release`) to prevent memory leaks and double-free corruption when multiple tree states share common nodes.
 *   **Phase 6-6.5: Verification & Debugging**
     *   Implemented `aast_verify_integrity` to validate the Merkle DAG and detect in-memory tampering.
     *   Added a conditionally-compiled pretty-printer for development and debugging.
-    *   *Current state:* The core engine passes Valgrind with zero memory leaks or errors in both release and debug configurations.
+*   **Phase 6.8: Real-World Ingestion & Stress Testing**
+    *   Implemented `aast_ingest_from_text` to parse a structured, indented text file.
+    *   This serves as the first stress test of the core engine with non-synthetic, externally-loaded data.
+    *   *Current state:* The full ingestion process passes Valgrind with zero memory leaks or errors, validating the robustness of the memory model under a more complex load.
 
 ## Build instructions
 
-To compile locally, ensure you have the OpenSSL development headers installed (e.g., `libssl-dev` on Debian/Ubuntu).
+To compile locally, ensure you have the OpenSSL development headers installed (e.g., `libssl-dev` on Debian/Ubuntu). You will also need to create an `ingest_data.txt` file in the root directory for the test harness to run.
 
 ```bash
 # Compile the lean, production-ready version (no debugging utilities)
@@ -44,8 +47,8 @@ gcc -Wall -Wextra -g main.c -o aast -lcrypto
 # Compile the debug version with the pretty-printer included
 gcc -Wall -Wextra -g -DDEBUG_PRINT main.c -o aast_debug -lcrypto
 
-# Execute the release build through the memory sandbox
+# Run the ingestion test harness through the memory sandbox
 valgrind --leak-check=full ./aast
 
-# Execute the debug build through the memory sandbox
+# Run the debug version of the ingestion test harness
 valgrind --leak-check=full ./aast_debug
