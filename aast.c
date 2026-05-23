@@ -522,7 +522,6 @@ Node* aast_deserialize_from_file(const char* filename) {
     while ((read = getline(&line, &len, fp)) != -1) {
         // --- 1. Use safe pointers, do not modify the original line buffer ---
         char* current = line;
-        char* end = line + read;
 
         // --- 2. Extract tokens by finding delimiters manually ---
         char* token_end;
