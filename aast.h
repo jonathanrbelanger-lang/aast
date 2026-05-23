@@ -1,12 +1,9 @@
 #ifndef AAST_H
 #define AAST_H
-
 #include <stddef.h> // For size_t
-
 // ----------------------------------------------------------------------------
 // Public Data Structure Definition
 // ----------------------------------------------------------------------------
-
 /**
  * @brief Represents a key-value entry in the children hash table of a Node.
  *
@@ -18,7 +15,13 @@ typedef struct ChildEntry {
     struct Node* child_node;   // A pointer to the actual child node.
     UT_hash_handle hh;      // Provided by uthash.h to make this struct hashable.
 } ChildEntry;
-
+/**
+ * @brief A structure for providing child information to the create_node function.
+ */
+typedef struct {
+    const char* key;    // The key for this child in the parent's hash table.
+    Node* child;      // A pointer to the child node.
+} AastChildInput;
 /**
  * @brief The core data structure for the Accretive-Abstract-State-Tree.
  *
@@ -33,27 +36,24 @@ typedef struct Node {
     size_t ref_count;        // The reference count for memory management.
     char hash[65];           // The SHA-256 hex string that uniquely identifies this node's state.
 } Node;
-
 // ----------------------------------------------------------------------------
 // Public API Function Prototypes
 // ----------------------------------------------------------------------------
-
 /**
  * @brief Creates a new, immutable A-AST node.
  *
- * This is the primary constructor. It performs deep copies of the key and payload,
- * shallow copies the children pointer list, and computes the final SHA-256 hash.
- * On success, the returned node has a reference count of 1.
+ * This is the primary constructor. It performs a deep copy of the payload,
+ * creates a hash table for its children, and computes the final SHA-256 hash.
+ * On success, the returned node has a reference count of 1. The children
+ * provided will be retained (their ref_count will be incremented).
  *
  * @param type The semantic type for the node.
- * @param key The semantic key for the node.
  * @param payload The string data for the node.
- * @param children An array of Node pointers for the children.
+ * @param children_input An array of AastChildInput structs.
  * @param child_count The number of children.
  * @return A pointer to the newly created Node, or NULL on allocation failure.
  */
-Node* create_node(const char* type, const char* key, const char* payload, Node** children, size_t child_count);
-
+Node* create_node(const char* type, const char* payload, const AastChildInput* children_input, size_t child_count);
 /**
  * @brief Decreases the reference count of a node and frees it if the count reaches zero.
  *
@@ -64,7 +64,6 @@ Node* create_node(const char* type, const char* key, const char* payload, Node**
  * stack overflows. Trees exceeding this depth will not be fully deallocated.
  */
 void aast_release(Node* node);
-
 /**
  * @brief Manually increases the reference count of a node.
  *
@@ -75,7 +74,6 @@ void aast_release(Node* node);
  * @return 0 on success, -1 on failure (if ref_count would overflow).
  */
 int aast_retain(Node* node);
-
 /**
  * @brief Creates a new tree state by "mutating" a node at a specified path.
  *
@@ -90,7 +88,6 @@ int aast_retain(Node* node);
  * @return A pointer to the new root node of the modified tree, or NULL on failure.
  */
 Node* accrete_new_state(const Node* root, const char* const* path, size_t path_len, const char* new_payload);
-
 /**
  * @brief Cryptographically verifies the integrity of the entire A-AST.
  *
@@ -109,7 +106,6 @@ int aast_verify_integrity(const Node* root);
  * @return A pointer to the root node of the newly ingested tree, or NULL on failure.
  */
 Node* aast_ingest_from_text(const char* text_data);
-
 /**
  * @brief Serializes an entire A-AST to a file in a leaves-first format.
  *
@@ -118,7 +114,6 @@ Node* aast_ingest_from_text(const char* text_data);
  * @return 0 on success, -1 on failure.
  */
 int aast_serialize_to_file(const Node* root, const char* filename);
-
 /**
  * @brief Deserializes an A-AST from a file.
  *
@@ -129,7 +124,6 @@ int aast_serialize_to_file(const Node* root, const char* filename);
  * @return A pointer to the root node of the loaded tree, or NULL on failure.
  */
 Node* aast_deserialize_from_file(const char* filename);
-
 // --- Conditionally Compiled Debugging Utilities ---
 #ifdef DEBUG_PRINT
 /**
@@ -139,5 +133,4 @@ Node* aast_deserialize_from_file(const char* filename);
  */
 void aast_print_tree(const Node* root);
 #endif // DEBUG_PRINT
-
 #endif // AAST_H
