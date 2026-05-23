@@ -1,6 +1,6 @@
 /**
  * @file main.c
- * @brief A-AST (Accretive Abstract Syntax Tree) Core Implementation.
+ * @brief A-AST (Accretive Abstract State Tree) Core Implementation.
  *
  * This file contains the complete implementation of an experimental, memory-safe,
  * and cryptographically verifiable data structure.
