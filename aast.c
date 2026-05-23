@@ -74,101 +74,120 @@ static void compute_sha256_hex(const char* data, char outputBuffer[65]) {
 static char* generate_canonical_buffer(const Node* node) {
     if (node == NULL) return NULL;
     size_t type_len = strlen(node->type);
-    size_t key_len = (node->key) ? strlen(node->key) : 0;
     size_t payload_len = (node->payload) ? strlen(node->payload) : 0;
     char* hashes_str = NULL;
+
     if (node->child_count > 0) {
         size_t hashes_str_len = (node->child_count * 64) + (node->child_count - 1);
         hashes_str = (char*)malloc(hashes_str_len + 1);
         if (hashes_str == NULL) return NULL;
+
         char* p = hashes_str;
-        for (size_t i = 0; i < node->child_count; i++) {
-            memcpy(p, node->children[i]->hash, 64);
+        ChildEntry *child_entry, *tmp;
+        size_t i = 0;
+        // Iterate through the HASH TABLE of children to get their hashes.
+        // This relies on the table being sorted before this function is called.
+        HASH_ITER(hh, node->children, child_entry, tmp) {
+            memcpy(p, child_entry->child_node->hash, 64);
             p += 64;
             if (i < node->child_count - 1) { *p = ','; p++; }
+            i++;
         }
         *p = '\0';
     } else {
         hashes_str = "";
     }
-    int required_size = snprintf(NULL, 0, "%zu:%s|%zu:%s|%zu:%s|%zu:%s",
-        type_len, node->type, key_len, node->key ? node->key : "",
-        node->child_count, hashes_str, payload_len, node->payload ? node->payload : "");
+
+    int required_size = snprintf(NULL, 0, "%zu:%s|%zu:%s|%zu:%s",
+        type_len, node->type,
+        node->child_count, hashes_str,
+        payload_len, node->payload ? node->payload : "");
+
     if (required_size < 0) {
         if (node->child_count > 0) free(hashes_str);
         return NULL;
     }
+
     char* buffer = (char*)malloc(required_size + 1);
     if (buffer == NULL) {
         if (node->child_count > 0) free(hashes_str);
         return NULL;
     }
-    sprintf(buffer, "%zu:%s|%zu:%s|%zu:%s|%zu:%s",
-        type_len, node->type, key_len, node->key ? node->key : "",
-        node->child_count, hashes_str, payload_len, node->payload ? node->payload : "");
+
+    sprintf(buffer, "%zu:%s|%zu:%s|%zu:%s",
+        type_len, node->type,
+        node->child_count, hashes_str,
+        payload_len, node->payload ? node->payload : "");
+
     if (node->child_count > 0) free(hashes_str);
     return buffer;
 }
 
-
 // ----------------------------------------------------------------------------
 // Public API Implementations
 // ----------------------------------------------------------------------------
-
-Node* create_node(const char* type, const char* key, const char* payload, Node** children, size_t child_count) {
+Node* create_node(const char* type, const char* payload, const AastChildInput* children_input, size_t child_count) {
     Node* new_node = (Node*)malloc(sizeof(Node));
     if (new_node == NULL) return NULL;
-
-    new_node->key = NULL;
+    // Initialize all members for safe cleanup on partial failure
     new_node->payload = NULL;
-    new_node->children = NULL;
+    new_node->children = NULL; // IMPORTANT: uthash head must be NULL
     new_node->ref_count = 1;
+    new_node->child_count = 0; // Will be incremented as we add children
+    
     strncpy(new_node->type, type, 15);
     new_node->type[15] = '\0';
-    new_node->child_count = child_count;
-
-    if (key != NULL) {
-        new_node->key = strdup(key);
-        if (new_node->key == NULL) { free(new_node); return NULL; }
-    }
+   
     if (payload != NULL) {
         new_node->payload = strdup(payload);
-        if (new_node->payload == NULL) { free(new_node->key); free(new_node); return NULL; }
-    }
-    if (child_count > 0 && children != NULL) {
-        new_node->children = (Node**)malloc(child_count * sizeof(Node*));
-        if (new_node->children == NULL) { free(new_node->key); free(new_node->payload); free(new_node); return NULL; }
-        memcpy(new_node->children, children, child_count * sizeof(Node*));
+        if (new_node->payload == NULL) { free(new_node); return NULL; }
     }
 
-    char* canonical_buffer = generate_canonical_buffer(new_node);
-    if (canonical_buffer == NULL) {
-        free(new_node->children); free(new_node->key); free(new_node->payload); free(new_node);
-        return NULL;
+    // --- Build the children hash table ---
+    for (size_t i = 0; i < child_count; i++) {
+        ChildEntry* new_entry = (ChildEntry*)malloc(sizeof(ChildEntry));
+        if (!new_entry) goto cleanup_fail; // Jump to error handling
+
+        new_entry->key = strdup(children_input[i].key);
+        if (!new_entry->key) { free(new_entry); goto cleanup_fail; }
+        
+        new_entry->child_node = children_input[i].child;
+        
+        // The new parent node becomes an owner of this child
+        aast_retain(new_entry->child_node);
+        
+        HASH_ADD_KEYPTR(hh, new_node->children, new_entry->key, strlen(new_entry->key), new_entry);
+        new_node->child_count++;
     }
+
+    // --- Sort children by key for deterministic hashing ---
+    if (new_node->child_count > 0) {
+        HASH_SORT(new_node->children, child_sort_by_key);
+    }
+
+    // --- Generate final hash ---
+    char* canonical_buffer = generate_canonical_buffer(new_node);
+    if (canonical_buffer == NULL) goto cleanup_fail;
+    
     compute_sha256_hex(canonical_buffer, new_node->hash);
     free(canonical_buffer);
+
     return new_node;
-}
 
-void aast_release(Node* node) {
-    aast_release_recursive(node, 0);
-}
-
-int aast_retain(Node* node) {
-    if (node == NULL) return 0;
-    if (node->ref_count == SIZE_MAX) return -1;
-    node->ref_count++;
-    return 0;
-}
-
-Node* accrete_new_state(const Node* root, const char* const* path, size_t path_len, const char* new_payload) {
-    if (root == NULL || path == NULL || path_len == 0) return NULL;
-    return accrete_recursive_helper(root, path, 0, path_len, new_payload);
-}
-
-int aast_verify_integrity(const Node* root) {
-    return aast_verify_integrity_recursive(root, 0);
+cleanup_fail:
+    // Comprehensive cleanup on any allocation failure during child processing
+    if (new_node) {
+        ChildEntry *current_entry, *tmp;
+        HASH_ITER(hh, new_node->children, current_entry, tmp) {
+            HASH_DEL(new_node->children, current_entry);
+            aast_release(current_entry->child_node); // Release the retain we did
+            free(current_entry->key);
+            free(current_entry);
+        }
+        free(new_node->payload);
+        free(new_node);
+    }
+    return NULL;
 }
 
 // ----------------------------------------------------------------------------
@@ -247,8 +266,12 @@ static Node* accrete_recursive_helper(const Node* current_node, const char* cons
     return new_parent_node;
 }
 
-
-// --- Functions from here down were previously in main.c and are now part of the library implementation ---
+/**
+ * @brief Comparison function used by uthash to sort ChildEntry structs by key.
+ */
+static int child_sort_by_key(ChildEntry* a, ChildEntry* b) {
+    return strcmp(a->key, b->key);
+}
 
 // --- Ingestion Engine ---
 static int add_child_to_temp_node(TempNode* parent, TempNode* child) {
