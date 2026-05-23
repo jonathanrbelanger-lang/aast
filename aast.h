@@ -4,37 +4,37 @@
 // ----------------------------------------------------------------------------
 // Public Data Structure Definition
 // ----------------------------------------------------------------------------
+
+// Forward declare the Node struct so it can be used in other struct definitions.
+struct Node;
+
 /**
  * @brief Represents a key-value entry in the children hash table of a Node.
- *
- * This structure makes the children of a node searchable by key in O(1) time.
- * It is managed internally by the A-AST library.
  */
 typedef struct ChildEntry {
-    char* key;              // The key of the child node (used for hashing).
-    struct Node* child_node;   // A pointer to the actual child node.
-    UT_hash_handle hh;      // Provided by uthash.h to make this struct hashable.
+    char* key;
+    struct Node* child_node; // Use 'struct Node*' here
+    UT_hash_handle hh;
 } ChildEntry;
+
 /**
  * @brief A structure for providing child information to the create_node function.
  */
 typedef struct {
-    const char* key;    // The key for this child in the parent's hash table.
-    Node* child;      // A pointer to the child node.
+    const char* key;
+    struct Node* child; // And use 'struct Node*' here
 } AastChildInput;
+
 /**
  * @brief The core data structure for the Accretive-Abstract-State-Tree.
- *
- * An immutable, content-addressable node within a Merkle DAG. Its state is
- * cryptographically anchored by a SHA-256 hash upon creation.
  */
 typedef struct Node {
-    char type[16];           // Semantic type of the node (e.g., "ROOT", "TEXT").
-    char *payload;           // Owned by the Node. The actual string data value.
-    ChildEntry *children;    // A hash table of children, keyed by the child's 'key'. NULL if no children.
-    size_t child_count;      // The number of children.
-    size_t ref_count;        // The reference count for memory management.
-    char hash[65];           // The SHA-256 hex string that uniquely identifies this node's state.
+    char type[16];
+    char *payload;
+    ChildEntry *children;
+    size_t child_count;
+    size_t ref_count;
+    char hash[65];
 } Node;
 // ----------------------------------------------------------------------------
 // Public API Function Prototypes
