@@ -78,13 +78,13 @@ test: debug
 clean:
 	@echo "==> Cleaning up build artifacts..."
 	rm -f $(TARGET) $(DEBUG_TARGET) $(LIB_OBJS) $(EXAMPLE_OBJS) aast.dat core
-    rm -f tests/test_phase_a tests/*.log
+	rm -f tests/test_phase_a tests/*.log
 
 # --- Test Suite ---
 
 # Compile the Phase A test binary directly into the tests/ directory
 tests/test_phase_a: tests/test_phase_a.c aast.c
-	$(CC) $(CFLAGS) -I. $^ -o $@ -lcrypto
+	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
 
 # Execute the automated Valgrind gauntlet
 test_a: tests/test_phase_a
