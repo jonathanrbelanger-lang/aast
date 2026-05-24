@@ -2,6 +2,13 @@
 #define AAST_H
 #include <stddef.h> // For size_t
 #include "uthash.h"
+
+// ----------------------------------------------------------------------------
+// Architectural Operational Constraints (Empirically Mapped)
+// ----------------------------------------------------------------------------
+#define AAST_MAX_KEY_LEN     256   // Prevents O(N) string hashing degradation
+#define AAST_MAX_TYPE_LEN    16    // Standard fixed-width semantic tag limit
+
 // ----------------------------------------------------------------------------
 // Public Data Structure Definition
 // ----------------------------------------------------------------------------
