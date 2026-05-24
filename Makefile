@@ -90,3 +90,16 @@ tests/test_phase_a: tests/test_phase_a.c aast.c
 test_a: tests/test_phase_a
 	@echo "Executing Phase A Constraint Mapping..."
 	@cd tests && bash run_phase_a.sh
+# Compile the Key Length test binary
+tests/test_key_limit: tests/test_key_limit.c aast.c
+	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
+
+# Run a swept loop across key sizes to find the inflection point
+test_key_sweep: tests/test_key_limit
+	@echo "--- Beginning Multi-Step Key Length Sweep ---"
+	@./tests/test_key_limit 32
+	@./tests/test_key_limit 128
+	@./tests/test_key_limit 512
+	@./tests/test_key_limit 2048
+	@./tests/test_key_limit 8192
+	@./tests/test_key_limit 32768
