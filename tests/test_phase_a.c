@@ -37,11 +37,20 @@ int main(int argc, char *argv[]) {
 
     // Populate children with generic data
     for (int i = 0; i < max_children; i++) {
-        char key_buf[TEST_MAX_KEY_LEN];
+       char key_buf[TEST_MAX_KEY_LEN];
         snprintf(key_buf, sizeof(key_buf), "child_key_%08d", i);
         
-        children[i].key = strdup(key_buf); 
-        children[i].child = NULL; // Explicitly NULL for dummy leaves
+        // Strict C11 alternative to strdup
+        size_t key_len = strlen(key_buf) + 1;
+        char *safe_key = malloc(key_len);
+        if (!safe_key) {
+            fprintf(stderr, "Failed to allocate key string.\n");
+            exit(1);
+        }
+        strcpy(safe_key, key_buf);
+        
+        children[i].key = safe_key; 
+        children[i].child = NULL;
     }
 
     // 3. Construct the Mega-Node
