@@ -103,3 +103,10 @@ test_key_sweep: tests/test_key_limit
 	@./tests/test_key_limit 2048
 	@./tests/test_key_limit 8192
 	@./tests/test_key_limit 32768
+# Run a scaling payload sweep with zero children to isolate heap/hashing limits
+test_payload_sweep: tests/test_phase_a
+	@echo "--- Beginning Progressive Payload Scale Sweep ---"
+	@./tests/test_phase_a 0 10485760    # 10 MB
+	@./tests/test_phase_a 0 52428800    # 50 MB
+	@./tests/test_phase_a 0 209715200   # 200 MB
+	@./tests/test_phase_a 0 1073741824  # 1 GB
