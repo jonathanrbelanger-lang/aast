@@ -6,3 +6,6 @@ example_aast
 example_aast_debug
 aast.dat
 *.o
+# Test artifacts
+tests/test_phase_a
+tests/*.log
