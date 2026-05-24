@@ -78,3 +78,15 @@ test: debug
 clean:
 	@echo "==> Cleaning up build artifacts..."
 	rm -f $(TARGET) $(DEBUG_TARGET) $(LIB_OBJS) $(EXAMPLE_OBJS) aast.dat core
+    rm -f tests/test_phase_a tests/*.log
+
+# --- Test Suite ---
+
+# Compile the Phase A test binary directly into the tests/ directory
+tests/test_phase_a: tests/test_phase_a.c aast.c
+	$(CC) $(CFLAGS) -I. $^ -o $@ -lcrypto
+
+# Execute the automated Valgrind gauntlet
+test_a: tests/test_phase_a
+	@echo "Executing Phase A Constraint Mapping..."
+	@cd tests && bash run_phase_a.sh
