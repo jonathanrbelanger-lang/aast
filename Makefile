@@ -78,7 +78,7 @@ test: debug
 clean:
 	@echo "==> Cleaning up build artifacts..."
 	rm -f $(TARGET) $(DEBUG_TARGET) $(LIB_OBJS) $(EXAMPLE_OBJS) aast.dat core
-	rm -f tests/test_phase_a tests/test_key_limit tests/*.log
+	rm -f tests/test_phase_a tests/test_key_limit tests/test_depth_limit tests/*.log
 
 # --- Test Suite ---
 
