@@ -116,7 +116,6 @@ make clean*   **Phase 6.8: Real-World Ingestion & Stress Testing**
 *  uthash is available at:  [https://troydhanson.github.io/uthash/](https://troydhanson.github.io/uthash/).
 ---
 
-```bash
 ### Compile & Run
 
 The project is built via `make`. The `Makefile` produces two targets: a lean production binary and a debug binary with the conditionally-compiled pretty-printer enabled.
