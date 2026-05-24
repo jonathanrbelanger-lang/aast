@@ -133,13 +133,13 @@ static char* generate_canonical_buffer(const Node* node) {
 Node* create_node(const char* type, const char* payload, const AastChildInput* children_input, size_t child_count) {
     
     // --- START OF OPERATIONAL CONSTRAINT VALIDATION ---
-    // 1. Enforce semantic type constraint (Must fit safely inside char type[16])
+    // 1. Enforce semantic type constraint
     if (type && strlen(type) >= AAST_MAX_TYPE_LEN) {
         fprintf(stderr, "[A-AST Error] Type string '%s' exceeds maximum limit of %d bytes.\n", type, AAST_MAX_TYPE_LEN - 1);
         return NULL;
     }
 
-    // 2. Enforce key length constraint across all child inputs to prevent O(N) lookup degradation
+    // 2. Enforce key length constraint across all child inputs
     for (size_t i = 0; i < child_count; i++) {
         if (children_input && children_input[i].key) {
             if (strlen(children_input[i].key) > AAST_MAX_KEY_LEN) {
@@ -147,6 +147,12 @@ Node* create_node(const char* type, const char* payload, const AastChildInput* c
                 return NULL;
             }
         }
+    }
+
+    // 3. Enforce maximum payload chunking limit
+    if (payload && strlen(payload) > AAST_MAX_PAYLOAD_SIZE) {
+        fprintf(stderr, "[A-AST Error] Payload size (%zu bytes) exceeds maximum chunk threshold of %d bytes.\n", strlen(payload), AAST_MAX_PAYLOAD_SIZE);
+        return NULL;
     }
     // --- END OF OPERATIONAL CONSTRAINT VALIDATION ---
     Node* new_node = (Node*)malloc(sizeof(Node));
