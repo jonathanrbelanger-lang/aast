@@ -10,7 +10,7 @@
 // Internal Constants and Definitions
 // ----------------------------------------------------------------------------
 
-#define AAST_MAX_DEPTH 150000 // Safe recursion limit based on empirical tests.
+#define AAST_MAX_DEPTH 35000 // Empirically mapped to protect 8MB x86_64 Linux stack limits.
 
 // --- Structs for Ingestion Engine ---
 typedef struct TempNode {
