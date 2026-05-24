@@ -106,7 +106,7 @@ make clean*   **Phase 6.8: Real-World Ingestion & Stress Testing**
     *   Rewrote all core functions to be fully compatible with the hash-based child structure.
     *   Resolved a use-after-free bug in the ingestion engine and a memory leak in `aast_deserialize_from_file` related to temporary node-lookup map ownership.
     *   *Current state:* The full round-trip (ingest → serialize → deserialize → verify) passes Valgrind with zero memory errors and zero leaks, validating the robustness of the memory model under realistic load.
-
+```
 ## Build Instructions
 
 ### Dependencies
@@ -116,6 +116,7 @@ make clean*   **Phase 6.8: Real-World Ingestion & Stress Testing**
 *  uthash is available at:  [https://troydhanson.github.io/uthash/](https://troydhanson.github.io/uthash/).
 ---
 
+```bash
 ### Compile & Run
 
 The project is built via `make`. The `Makefile` produces two targets: a lean production binary and a debug binary with the conditionally-compiled pretty-printer enabled.
