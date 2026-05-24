@@ -4,11 +4,14 @@
 #include "aast.h" // Assuming your core library header
 
 // Define the absolute physical limits you want to test
-#define TEST_MAX_CHILDREN 10000 
-#define TEST_MAX_PAYLOAD_SIZE (1024 * 1024 * 10) // 10 MB payload
-#define TEST_MAX_KEY_LEN 256
-#define TEST_MAX_TYPE_LEN 64
+// Inside test_phase_a.c main()
+if (argc != 3) {
+    fprintf(stderr, "Usage: %s <max_children> <max_payload_bytes>\n", argv[0]);
+    return 1;
+}
 
+int max_children = atoi(argv[1]);
+size_t max_payload = (size_t)atol(argv[2]);
 int main() {
     printf("Initializing Phase A Maximum Node Fill Test...\n");
 
