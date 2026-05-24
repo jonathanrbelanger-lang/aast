@@ -50,8 +50,8 @@ The project is being developed in discrete, verifiable phases.
 ### Dependencies
 
 *   **OpenSSL:** Provides SHA-256 cryptographic primitives via the EVP API. Install the development headers with `sudo apt install libssl-dev` on Debian/Ubuntu systems.
-*   **uthash:** A header-only hash table library used for the internal child-node map. Available at [https://troydhanson.github.io/uthash/](https://troydhanson.github.io/uthash/).
-*   The compatible version of uthash available at build time is included in this version of A-AST, check current version before compiling and run wextra and valgrind to ensure zero-leak is still in effect. Report anomalies as by opening an Issue. 
+*   **uthash:** A header-only hash table library used for the internal child-node map. The compatible version of uthash.h is bundled directly within this repository to guarantee deterministic builds. If you update this header locally, run make with -Wextra and execute the valgrind --leak-check=full suite to verify the zero-leak contract remains intact. Please report any memory anomalies by opening an Issue.
+*  uthash is available at:  [https://troydhanson.github.io/uthash/](https://troydhanson.github.io/uthash/).
 ---
 
 ### Compile & Run
