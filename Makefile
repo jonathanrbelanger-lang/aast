@@ -110,3 +110,13 @@ test_payload_sweep: tests/test_phase_a
 	@./tests/test_phase_a 0 52428800    # 50 MB
 	@./tests/test_phase_a 0 209715200   # 200 MB
 	@./tests/test_phase_a 0 1073741824  # 1 GB
+# Compile the Vertical Depth test binary
+tests/test_depth_limit: tests/test_depth_limit.c aast.c
+	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
+
+# Run a progressive depth sweep to find where the stack or guardrail breaks
+test_depth_sweep: tests/test_depth_limit
+	@echo "--- Beginning Progressive Vertical Depth Sweep ---"
+	@./tests/test_depth_limit 1000      # Nominal deep tree
+	@./tests/test_depth_limit 10000     # Heavy deep tree
+	@./tests/test_depth_limit 50000     # Extreme deep tree
