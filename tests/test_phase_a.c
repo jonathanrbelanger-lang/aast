@@ -1,12 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../aast.h" // Relative path since this is in tests/
+#include "../aast.h" 
 
 #define TEST_MAX_KEY_LEN 256
 
 int main(int argc, char *argv[]) {
-    // Enforce CLI arguments
     if (argc != 3) {
         fprintf(stderr, "Usage: %s <max_children> <max_payload_bytes>\n", argv[0]);
         return 1;
@@ -16,9 +15,15 @@ int main(int argc, char *argv[]) {
     size_t max_payload = (size_t)atol(argv[2]);
 
     printf("Initializing Phase A Maximum Node Fill Test...\n");
-    printf("Target: %d children, %zu bytes payload\n", max_children, max_payload);
 
-    // 1. Allocate massive synthetic payload
+    // 0. Create a single valid leaf node for structural sharing
+    Node *dummy_leaf = create_node("leaf", "dummy_data", NULL, 0);
+    if (!dummy_leaf) {
+        fprintf(stderr, "Failed to initialize dummy leaf.\n");
+        return 1;
+    }
+
+    // 1. Allocate payload
     char *massive_payload = malloc(max_payload);
     if (!massive_payload) {
         fprintf(stderr, "Failed to allocate payload buffer.\n");
@@ -27,7 +32,7 @@ int main(int argc, char *argv[]) {
     memset(massive_payload, 'X', max_payload - 1);
     massive_payload[max_payload - 1] = '\0';
 
-    // 2. Generate maximum child inputs
+    // 2. Generate child inputs
     AastChildInput *children = malloc(sizeof(AastChildInput) * max_children);
     if (!children) {
         fprintf(stderr, "Failed to allocate children array.\n");
@@ -35,12 +40,11 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Populate children with generic data
+    // Populate children, pointing ALL of them to the single dummy_leaf
     for (int i = 0; i < max_children; i++) {
-       char key_buf[TEST_MAX_KEY_LEN];
+        char key_buf[TEST_MAX_KEY_LEN];
         snprintf(key_buf, sizeof(key_buf), "child_key_%08d", i);
         
-        // Strict C11 alternative to strdup
         size_t key_len = strlen(key_buf) + 1;
         char *safe_key = malloc(key_len);
         if (!safe_key) {
@@ -50,7 +54,7 @@ int main(int argc, char *argv[]) {
         strcpy(safe_key, key_buf);
         
         children[i].key = safe_key; 
-        children[i].child = NULL;
+        children[i].child = dummy_leaf; // Provide a valid Node pointer
     }
 
     // 3. Construct the Mega-Node
@@ -58,7 +62,7 @@ int main(int argc, char *argv[]) {
     Node *mega_node = create_node("mega_type", massive_payload, children, max_children);
 
     if (!mega_node) {
-        fprintf(stderr, "Node creation failed (Likely stack/heap exhaustion).\n");
+        fprintf(stderr, "Node creation failed.\n");
     } else {
         printf("Node created successfully. Root hash: %s\n", mega_node->hash);
     }
@@ -67,8 +71,9 @@ int main(int argc, char *argv[]) {
     if (mega_node) {
         aast_release(mega_node);
     }
+    // Also release our initial reference to the dummy leaf
+    aast_release(dummy_leaf);
     
-    // create_node performs a deep copy of the keys, so we must free our local allocations
     for (int i = 0; i < max_children; i++) {
         free((void*)children[i].key);
     }
