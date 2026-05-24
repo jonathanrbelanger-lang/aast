@@ -162,9 +162,10 @@ transition from O(N) child arrays to O(1) hash table lookups in Phase 8.5 was
 not just a performance improvement, it was a requirement for a library whose 
 purpose includes efficient querying at scale.
 
-This constraint has implications for contributors. A PR that adds a convenience
-feature at the cost of overhead that cannot be opted out of will be rejected,
-regardless of how useful the feature is. The library's contract is minimal and
+This constraint has implications for contributors. The baseline overhead 
+contract is zero-tolerance. Any proposed convenience features must be 
+strictly opt-in, conditionally compiled, and demonstrate zero impact on 
+the baseline execution path. The library's contract is minimal and
 precise. Additions that broaden the contract require justification against the
 design philosophy, not just against the immediate use case. This protects the
 project from feature and scope creep. 
@@ -225,7 +226,9 @@ strings. The boundary between parsing and traversal is intentional — encoding
 any tokenization convention into the core traversal functions would impose a
 silent contract on every downstream consumer of the library. 
 
-This is a design decision, not a deferral. 
+This boundary is intentional. Building a tokenization convention into the core 
+traversal functions would impose a silent, inescapable contract on every 
+downstream consumer.
 
 A standalone tokenization utility for C consumers who need it is a candidate 
 for future work, explicitly named and optional. For Python consumers, 
@@ -237,10 +240,11 @@ and changes to the parsing strategy require no modification to the C ABI.
 ## 4. Known Constraints and Open Design Problems
 
 The following problems are understood, honestly stated, and not yet fully
-resolved. Contributors who engage with these problems are expected to bring
-the same epistemic discipline to their proposals that the project applies to
-its own decisions. An unresolved problem stated clearly is more useful than a
-resolved problem stated incorrectly.
+resolved. These constraints require structural, mathematically sound 
+resolutions, not surface-level patches. Proposals addressing these areas 
+must prioritize empirical measurement over assumed fixes. An unresolved 
+problem stated clearly is more useful than a resolved problem stated 
+incorrectly.
 
 ### The Code Payload Problem
 
@@ -299,10 +303,10 @@ ceiling is.
 
 ## 5. Planned Experiments
 
-In this project, experiments precede design when the design depends on
-empirical facts about the structure's behavior. Designing branching logic
-before the ceiling is measured is designing against an assumption. The
-experiments in this section exist to replace assumptions with measurements.
+Designing branching logic before the operational ceiling is measured is 
+designing against an assumption. The following experiments exist to 
+establish the physical limits of the structure before that logic is written. 
+The experiments in this section exist to replace assumptions with measurements.
 
 ### Phase A: Maximum Node Fill
 
