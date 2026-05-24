@@ -8,6 +8,7 @@
 // ----------------------------------------------------------------------------
 #define AAST_MAX_KEY_LEN     256   // Prevents O(N) string hashing degradation
 #define AAST_MAX_TYPE_LEN    16    // Standard fixed-width semantic tag limit
+#define AAST_MAX_PAYLOAD_SIZE    536870912   // 512 MB chunking threshold for heap stability
 
 // ----------------------------------------------------------------------------
 // Public Data Structure Definition
