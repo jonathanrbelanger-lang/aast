@@ -9,3 +9,4 @@ aast.dat
 # Test artifacts
 tests/test_phase_a
 tests/*.log
+tests/test_key_limit
