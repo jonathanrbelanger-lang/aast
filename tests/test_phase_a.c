@@ -1,57 +1,66 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "aast.h" // Assuming your core library header
+#include "../aast.h" // Relative path since this is in tests/
 
-// Define the absolute physical limits you want to test
-// Inside test_phase_a.c main()
-if (argc != 3) {
-    fprintf(stderr, "Usage: %s <max_children> <max_payload_bytes>\n", argv[0]);
-    return 1;
-}
+#define TEST_MAX_KEY_LEN 256
 
-int max_children = atoi(argv[1]);
-size_t max_payload = (size_t)atol(argv[2]);
-int main() {
+int main(int argc, char *argv[]) {
+    // Enforce CLI arguments
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <max_children> <max_payload_bytes>\n", argv[0]);
+        return 1;
+    }
+
+    int max_children = atoi(argv[1]);
+    size_t max_payload = (size_t)atol(argv[2]);
+
     printf("Initializing Phase A Maximum Node Fill Test...\n");
+    printf("Target: %d children, %zu bytes payload\n", max_children, max_payload);
 
     // 1. Allocate massive synthetic payload
-    char *massive_payload = malloc(TEST_MAX_PAYLOAD_SIZE);
+    char *massive_payload = malloc(max_payload);
     if (!massive_payload) {
         fprintf(stderr, "Failed to allocate payload buffer.\n");
         return 1;
     }
-    memset(massive_payload, 'X', TEST_MAX_PAYLOAD_SIZE - 1);
-    massive_payload[TEST_MAX_PAYLOAD_SIZE - 1] = '\0';
+    memset(massive_payload, 'X', max_payload - 1);
+    massive_payload[max_payload - 1] = '\0';
 
     // 2. Generate maximum child inputs
-    AastChildInput *children = malloc(sizeof(AastChildInput) * TEST_MAX_CHILDREN);
+    AastChildInput *children = malloc(sizeof(AastChildInput) * max_children);
     if (!children) {
         fprintf(stderr, "Failed to allocate children array.\n");
         free(massive_payload);
         return 1;
     }
 
-    // Populate children with generic data to trigger uthash hashing
-    for (int i = 0; i < TEST_MAX_CHILDREN; i++) {
+    // Populate children with generic data
+    for (int i = 0; i < max_children; i++) {
         char key_buf[TEST_MAX_KEY_LEN];
         snprintf(key_buf, sizeof(key_buf), "child_key_%08d", i);
         
-        // Assuming your child struct has key and a dummy hash/node reference
         children[i].key = strdup(key_buf); 
-        // children[i].node = ... (create dummy leaf nodes if required by your API)
+        children[i].child = NULL; // Explicitly NULL for dummy leaves
     }
 
     // 3. Construct the Mega-Node
-    printf("Constructing node with %d children and %d byte payload...\n", TEST_MAX_CHILDREN, TEST_MAX_PAYLOAD_SIZE);
-    
-    // Execute core function
-    // Node *mega_node = create_node("mega_type", massive_payload, children, TEST_MAX_CHILDREN);
+    printf("Constructing the node...\n");
+    Node *mega_node = create_node("mega_type", massive_payload, children, max_children);
+
+    if (!mega_node) {
+        fprintf(stderr, "Node creation failed (Likely stack/heap exhaustion).\n");
+    } else {
+        printf("Node created successfully. Root hash: %s\n", mega_node->hash);
+    }
 
     // 4. Teardown & Release
-    // aast_release(mega_node);
+    if (mega_node) {
+        aast_release(mega_node);
+    }
     
-    for (int i = 0; i < TEST_MAX_CHILDREN; i++) {
+    // create_node performs a deep copy of the keys, so we must free our local allocations
+    for (int i = 0; i < max_children; i++) {
         free((void*)children[i].key);
     }
     free(children);
