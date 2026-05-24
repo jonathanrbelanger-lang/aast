@@ -25,7 +25,7 @@ everyone, regardless of experience level.
 Low-effort contributions — PRs that add convenience without engaging with the
 contract, or that resolve open design problems without the supporting reasoning
 — will be reviewed against the standard visible in the codebase itself. The
-bar is not credentialism. It is rigor. Those are different things.
+bar is not credentialism, it is rigor, and those are different things.
 
 ---
 
@@ -101,8 +101,8 @@ cannot audit, and that pays O(N) parsing overhead on every read, is an agent
 whose operational costs are structurally higher than they need to be. The
 existing tooling that addresses this problem — and some of it is efficient and
 well-designed — was built for different consumers and different problem spaces.
-It was not designed for this workflow. Adapting it is possible. It is not the
-same as solving the problem.
+It was not designed for this workflow, and while adapting it is possible, it is
+not native to the system in question.
 
 ---
 
@@ -115,12 +115,13 @@ a guideline. It is enforced by the architecture. Modifying the state of the
 tree requires accreting a new state — constructing new nodes along the modified
 path while reusing unmodified branches via structural sharing. The previous
 state is preserved by construction. There is no mechanism for in-place
-mutation, and there will not be one.
+mutation at this time, as that would invalidate the design of the A-AST.
+There are also no plans to design or develop that mechanism.
 
 This is the foundational constraint from which everything else follows. A
 mutable node would invalidate its hash, break the Merkle chain, and destroy
-the determinism of the system. Immutability is not a feature. It is the
-promise.
+the determinism of the system. Immutability is a binding contract, in the
+greater context of the project.
 
 ### Cryptographic Provenance at Write Time
 
@@ -136,40 +137,43 @@ The implication is that the canonical buffer from which the hash is computed
 must be strictly deterministic. Identical tree structures must produce identical
 hashes regardless of construction order, ingestion sequence, or system
 environment. This determinism is enforced by lexicographic sorting of children
-at node creation time. It is not optional and it is not configurable.
+at node creation time, and it is not surfaced as a configurable parameter by
+design.
 
 ### Agent-First, Human-Readable Second
 
-The A-AST is optimized for machine ingestion. Human readability is a secondary
-concern, accommodated through a conditionally compiled debug utility that is
-off by default and adds zero overhead to a production build. This is not an
-aesthetic choice. It is a direct expression of the problem statement. Every
-byte of formatting that exists for human convenience is a byte an agent must
-parse without benefit.
+The A-AST is being optimized for machine ingestion. Human readability is a 
+secondary concern, accommodated through a conditionally compiled debug 
+utility that is off by default and adds zero overhead to a production build. 
+This is not an aesthetic choice, but rather a direct expression of the 
+problem statement. Every byte of formatting that exists for human convenience 
+is additional overhead that does not benefit an agent, and as such, adds 
+complexity and cost, which is orthogonal to the core premise.
 
 Organizations deploying the A-AST are responsible for their own human-readable
-output layer. The library provides the structure. The presentation is the
-caller's concern.
+output layer. The library provides the structure, and the design ditates that
+we push these downstream tasks to them. 
 
 ### Minimal Overhead as a First-Class Constraint
 
 Reducing overhead is not an optimization target to be addressed after the
-system is working. It is a design constraint applied from the beginning. The
+system is working, itt is a design constraint applied from the beginning. The
 transition from O(N) child arrays to O(1) hash table lookups in Phase 8.5 was
-not a performance improvement. It was a correctness requirement for a library
-whose purpose includes efficient querying at scale.
+not just a performance improvement, it was a requirement for a library whose 
+purpose includes efficient querying at scale.
 
 This constraint has implications for contributors. A PR that adds a convenience
 feature at the cost of overhead that cannot be opted out of will be rejected,
 regardless of how useful the feature is. The library's contract is minimal and
 precise. Additions that broaden the contract require justification against the
-design philosophy, not just against the immediate use case.
+design philosophy, not just against the immediate use case. This protects the
+project from feature and scope creep. 
 
 ### Determinism as a Promise
 
 Given the same input, the A-AST will always produce the same output. This is
 not a property that can be partially relaxed for specific use cases. It is the
-foundation of the library's utility as a verifiable state layer. Any design
+foundation of the library's utility as a verifiable state layer. A design
 decision that introduces non-determinism — in hash computation, in
 serialization order, in traversal behavior — is incompatible with the project
 regardless of its other merits.
@@ -219,12 +223,14 @@ is. That is the Merkle property working as designed.
 **Tokenization.** Path traversal functions accept pre-tokenized arrays of key
 strings. The boundary between parsing and traversal is intentional — encoding
 any tokenization convention into the core traversal functions would impose a
-silent contract on every downstream consumer of the library. This is a design
-decision, not a deferral. A standalone tokenization utility for C consumers who
-need it is a candidate for future work, explicitly named and optional. For
-Python consumers, tokenization belongs in the Cython bridge, where string
-handling is natural and changes to the parsing strategy require no modification
-to the C ABI.
+silent contract on every downstream consumer of the library. 
+
+This is a design decision, not a deferral. 
+
+A standalone tokenization utility for C consumers who need it is a candidate 
+for future work, explicitly named and optional. For Python consumers, 
+tokenization belongs in the Cython bridge, where string handling is natural 
+and changes to the parsing strategy require no modification to the C ABI.
 
 ---
 
@@ -248,7 +254,7 @@ containing source code may contain characters — braces, brackets, newlines,
 key-value separators — that the parser would otherwise treat as structural
 delimiters. A misread boundary produces a silently malformed node whose hash
 is internally consistent but structurally incorrect. The integrity check
-passes. The data is wrong.
+passes, but the data is wrong.
 
 The suspected failure point is ingestion boundary detection, not hash
 computation. The leading candidate solution is a wrapping mechanism that
@@ -259,16 +265,17 @@ through every subsequent operation.
 
 Whether this is a payload-level concern or an ingestion-level concern is not
 yet determined. The hash promise — that the canonical buffer faithfully
-represents the node — cannot be weakened under any resolution of this problem.
-That constraint is absolute.
+represents the node — cannot be weakened under any resolution of this problem 
+without eroding the core premise and design philosophy.
 
 ### The Encoding Boundary
 
-UTF-8 NFC is declared. Validate and reject is implemented. The boundary is
-clear. The open question is edge case handling within valid UTF-8 NFC — Unicode
-normalization edge cases that produce different byte sequences for semantically
-identical content. This is acknowledged and will be addressed as the ingestion
-pipeline matures.
+UTF-8 NFC is intended as the chosen encoding. Future work involvesd explicit
+functionality to build out the validate -> [reject, accept] logic to ensure
+this. It has been chosen for its adoption within the greater ML ecosystem, 
+to reduce friction points. There is not yet a design or plan for other encoding
+schemas, though it is open for discussion in terms of externalized added 
+functionality.
 
 ### The Doc-Break Problem
 
