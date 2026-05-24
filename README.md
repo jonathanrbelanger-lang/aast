@@ -17,7 +17,8 @@ The A-AST is fundamentally derivative work, combining well-established concepts 
 *   **Immutability via Accretion:** Nodes cannot be altered once created. Modifying the tree requires accreting a new state, naturally preserving previous versions.
 *   **Cryptographic Provenance:** Each parent node's ID is a deterministic SHA-256 hash of its attributes and its children's hashes. This makes the entire structure content-addressable and verifiable.
 *   **Agent-First, Human-Readable Second:** Traditional data formats often prioritize human readability. The A-AST prioritizes mathematical determinism for machine ingestion. The goal is to provide a structure that an AI agent can trust and verify with a single cryptographic check, minimizing ambiguity and parsing overhead. Human-debugging utilities, like the tree pretty-printer, are considered secondary and are compiled conditionally, ensuring they add **zero overhead** to a production build.
-
+*   For a fuller breadown, refer to main/Design.md, which breaks down the design and architecture decisions and core philosophy in detail.
+  
 ## Execution State & Verification
 
 The project is being developed in discrete, verifiable phases.
