@@ -235,10 +235,24 @@ const Node* aast_find_child_by_key(const Node* parent, const char* key) {
     ChildEntry* found_entry = NULL;
     HASH_FIND_STR(parent->children, key, found_entry);
     
-    if (found_entry) {
+   if (found_entry) {
         return found_entry->child_node;
     }
     return NULL;
+}
+
+const Node* aast_query_path(const Node* root, const char* const* path, size_t path_len) {
+    if (!root || !path) return NULL;
+    if (path_len == 0) return root; // An empty path theoretically points to the root itself
+
+    const Node* current = root;
+    for (size_t i = 0; i < path_len; i++) {
+        current = aast_find_child_by_key(current, path[i]);
+        if (!current) {
+            return NULL; // Path broken, fail gracefully
+        }
+    }
+    return current;
 }
 
 Node* accrete_new_state(const Node* root, const char* const* path, size_t path_len, const char* new_payload) {
