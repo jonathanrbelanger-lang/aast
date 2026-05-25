@@ -147,9 +147,11 @@ test_query_horizontal: tests/test_query_scale
 	@./tests/test_query_scale horizontal 10000
 	@./tests/test_query_scale horizontal 100000
 
-# Run a vertical scaling sweep (1K, 10K, 30K depth)
+# Run a vertical scaling sweep
 test_query_vertical: tests/test_query_scale
 	@echo "--- Beginning Query Vertical Sweep ---"
 	@./tests/test_query_scale vertical 1000
 	@./tests/test_query_scale vertical 10000
 	@./tests/test_query_scale vertical 30000
+	@./tests/test_query_scale vertical 50000
+	@./tests/test_query_scale vertical 100000
