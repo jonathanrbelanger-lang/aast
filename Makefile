@@ -82,6 +82,7 @@ clean:
 	rm -f tests/test_query
 	rm -f tests/test_query_scale
 	rm -f tests/test_filetype
+	rm -f tests/test_nfc
 # --- Test Suite ---
 
 # Compile the Phase A test binary directly into the tests/ directory
@@ -172,3 +173,10 @@ build_ucd: tools/build_nfc_aast
 	python3 tools/fetch_ucd.py
 	@echo "2. Compiling and running A-AST Forge..."
 	./tools/build_nfc_aast
+# --- UTF-8 NFC Validation Engine Tests ---
+tests/test_nfc: tests/test_nfc.c aast.c
+	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
+
+test_nfc: tests/test_nfc
+	@echo "--- Running UTF-8 NFC Engine Test ---"
+	valgrind --leak-check=full --show-leak-kinds=all ./tests/test_nfc
