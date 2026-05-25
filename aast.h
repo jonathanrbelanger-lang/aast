@@ -75,6 +75,17 @@ Node* create_node(const char* type, const char* payload, const AastChildInput* c
 const Node* aast_find_child_by_key(const Node* parent, const char* key);
 
 /**
+ * @brief Traverses a key-based path to retrieve a deeply nested node.
+ *
+ * @param root The root node to start the search from.
+ * @param path An array of strings representing the key-based path.
+ * @param path_len The number of elements in the path array.
+ * @return A non-owning (weak) const pointer to the target node, or NULL if any step fails.
+ * @warning Do NOT call aast_release() on the returned pointer. Lifecycle is managed by the tree.
+ */
+const Node* aast_query_path(const Node* root, const char* const* path, size_t path_len);
+
+/**
  * @brief Decreases the reference count of a node and frees it if the count reaches zero.
  *
  * This is the primary memory management function. It should be called on any root
