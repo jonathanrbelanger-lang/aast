@@ -163,3 +163,12 @@ tests/test_filetype: tests/test_filetype.c aast.c
 test_filetype: tests/test_filetype
 	@echo "--- Running Filetype Enforcement Test ---"
 	valgrind --leak-check=full --show-leak-kinds=all ./tests/test_filetype
+# --- Tooling: NFC Ruleset Compiler ---
+tools/build_nfc_aast: tools/build_nfc_aast.c aast.c
+	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
+
+build_ucd: tools/build_nfc_aast
+	@echo "1. Downloading and Extracting UCD via Python..."
+	python3 tools/fetch_ucd.py
+	@echo "2. Compiling and running A-AST Forge..."
+	./tools/build_nfc_aast
