@@ -518,70 +518,108 @@ static Node* convert_temp_to_aast(TempNode* t_node) {
 Node* aast_ingest_from_text(const char* text_data, const Node* nfc_validator) {
     if (!text_data) return NULL;
 
-    // --- START OF EDGE VALIDATION ---
-    /*
-     * ARCHITECTURAL NOTATION: The Encoding Boundary
-     * We enforce UTF-8 NFC hygiene here at the outer edge (the ingestion parser), 
-     * rather than deep inside the core `create_node` constructor. 
-     * 
-     * While placing this inside `create_node` would mathematically harden the 
-     * data structure against raw C API misuse, it would impose an unacceptable 
-     * O(N) validation tax on every single node instantiated from already-trusted 
-     * sources (like disk deserialization). By validating the raw text blob exactly 
-     * once at the system boundary, we adhere to the "Minimal Overhead" constraint 
-     * defined in DESIGN.md. C-API consumers are trusted to maintain their own hygiene.
-     */
-    if (nfc_validator != NULL) {
-        if (!aast_validate_utf8_nfc(nfc_validator, text_data)) {
-            fprintf(stderr, "[A-AST Error] Ingestion failed: Text violates strict UTF-8 NFC encoding contract.\n");
-            return NULL;
-        }
-    }
-    // --- END OF EDGE VALIDATION ---
+    char* text_copy = strdup(text_data);
+    if (!text_copy) return NULL;
+    char* to_free = text_copy;
+
     TempNode* temp_root = calloc(1, sizeof(TempNode));
-    if (!temp_root) return NULL;
+    if (!temp_root) { free(to_free); return NULL; }
     TempNode* current_parent = temp_root;
     int prev_indent = -2;
-    char* text_copy = strdup(text_data);
-    if(!text_copy) { free(temp_root); return NULL; }
-    char* to_free = text_copy;
-    char* line;
-    while ((line = strsep(&text_copy, "\n")) != NULL) {
-        char* line_start = line;
-        while (*line_start == ' ') line_start++;
-        if (*line_start == '\0') continue; // Skip empty lines
-        int current_indent = line_start - line;
-        if (current_indent % 2 != 0) { free_temp_tree(temp_root); free(to_free); return NULL; }
-        if (current_indent > prev_indent + 2) { free_temp_tree(temp_root); free(to_free); return NULL; }
+
+    char* p = text_copy;
+    while (p && *p != '\0') {
+        // 1. Count indentation and handle empty lines
+        int current_indent = 0;
+        while (*p == ' ') { current_indent++; p++; }
+        if (*p == '\n') { p++; continue; }
+        if (*p == '\0') break;
+
+        if (current_indent % 2 != 0 || current_indent > prev_indent + 2) goto error_cleanup;
+
         while (current_indent <= prev_indent) {
             current_parent = current_parent->parent;
             prev_indent -= 2;
         }
-        char* key = strsep(&line_start, ":");
-        char* type = strsep(&line_start, ":");
-        char* payload = line_start;
-        if (!key || !type) { free_temp_tree(temp_root); free(to_free); return NULL; }
+
+        // 2. Extract Key
+        char* key = p;
+        char* colon1 = strchr(p, ':');
+        if (!colon1) goto error_cleanup;
+        *colon1 = '\0';
+
+        // 3. Extract Type
+        char* type = colon1 + 1;
+        char* colon2 = strchr(type, ':');
+        if (!colon2) goto error_cleanup;
+        *colon2 = '\0';
+
+        // 4. Extract Payload (The State Machine)
+        char* payload = colon2 + 1;
+        if ((unsigned char)*payload == 0xFF) {
+            // --- OPAQUE PAYLOAD MODE ---
+            payload++; // Skip opening 0xFF
+            char* end_ff = strchr(payload, 0xFF);
+            if (!end_ff) goto error_cleanup; // Missing closing 0xFF
+            *end_ff = '\0'; // Strip closing 0xFF
+            
+            p = end_ff + 1;
+            // Advance parser to the next line
+            while (*p != '\n' && *p != '\0') p++;
+            if (*p == '\n') p++;
+        } else {
+            // --- STANDARD SINGLE-LINE MODE ---
+            char* newline = strchr(payload, '\n');
+            if (newline) {
+                *newline = '\0';
+                p = newline + 1;
+            } else {
+                p = payload + strlen(payload); // End of file
+            }
+        }
+
+        // 5. NFC Hygiene Boundary (Validate the stripped components)
+        if (nfc_validator != NULL) {
+            if (!aast_validate_utf8_nfc(nfc_validator, key) ||
+                !aast_validate_utf8_nfc(nfc_validator, type) ||
+                (payload[0] != '\0' && !aast_validate_utf8_nfc(nfc_validator, payload))) {
+                fprintf(stderr, "[A-AST Error] Ingestion failed: Text violates strict UTF-8 NFC encoding contract.\n");
+                goto error_cleanup;
+            }
+        }
+
+        // 6. Build the Temp Node
         TempNode* new_temp_node = calloc(1, sizeof(TempNode));
-        if(!new_temp_node) { free_temp_tree(temp_root); free(to_free); return NULL; }
+        if (!new_temp_node) goto error_cleanup;
+        
         new_temp_node->key = strdup(key);
         new_temp_node->type = strdup(type);
-        if (payload) new_temp_node->payload = strdup(payload);
-        if(!new_temp_node->key || !new_temp_node->type || (payload && !new_temp_node->payload)) {
-             free_temp_tree(new_temp_node); free_temp_tree(temp_root); free(to_free); return NULL;
+        if (payload[0] != '\0') new_temp_node->payload = strdup(payload);
+        
+        if (!new_temp_node->key || !new_temp_node->type || (payload[0] != '\0' && !new_temp_node->payload)) {
+            free_temp_tree(new_temp_node);
+            goto error_cleanup;
         }
+
         add_child_to_temp_node(current_parent, new_temp_node);
         current_parent = new_temp_node;
         prev_indent = current_indent;
     }
-    free(to_free);
+
     Node* final_root = NULL;
     if (temp_root->child_count == 1) {
         final_root = convert_temp_to_aast(temp_root->children[0]);
     }
+    
     free_temp_tree(temp_root);
+    free(to_free);
     return final_root;
-}
 
+error_cleanup:
+    free_temp_tree(temp_root);
+    free(to_free);
+    return NULL;
+}
 // --- Persistence API ---
 static int serialize_recursive_helper(const Node* node, FILE* fp, VisitedNode** visited_set) {
     if (!node) return 0;
