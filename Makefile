@@ -80,6 +80,7 @@ clean:
 	rm -f $(TARGET) $(DEBUG_TARGET) $(LIB_OBJS) $(EXAMPLE_OBJS) aast.dat core
 	rm -f tests/test_phase_a tests/test_key_limit tests/test_depth_limit tests/*.log
 	rm -f tests/test_query
+	rm -f tests/test_query_scale
 # --- Test Suite ---
 
 # Compile the Phase A test binary directly into the tests/ directory
@@ -120,11 +121,21 @@ test_depth_sweep: tests/test_depth_limit
 	@./tests/test_depth_limit 1000      # Nominal deep tree
 	@./tests/test_depth_limit 10000     # Heavy deep tree
 	@./tests/test_depth_limit 50000     # Extreme deep tree
-# Compile the Query test binary
-tests/test_query: tests/test_query.c aast.c
+
+# Compile the Query Scale test binary
+tests/test_query_scale: tests/test_query_scale.c aast.c
 	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
 
-# Run the Query test under Valgrind
-test_query: tests/test_query
-	@echo "--- Running Query API Test ---"
-	valgrind --leak-check=full --show-leak-kinds=all ./tests/test_query
+# Run a horizontal scaling sweep (1K, 10K, 100K children)
+test_query_horizontal: tests/test_query_scale
+	@echo "--- Beginning Query Horizontal Sweep ---"
+	@./tests/test_query_scale horizontal 1000
+	@./tests/test_query_scale horizontal 10000
+	@./tests/test_query_scale horizontal 100000
+
+# Run a vertical scaling sweep (1K, 10K, 30K depth)
+test_query_vertical: tests/test_query_scale
+	@echo "--- Beginning Query Vertical Sweep ---"
+	@./tests/test_query_scale vertical 1000
+	@./tests/test_query_scale vertical 10000
+	@./tests/test_query_scale vertical 30000
