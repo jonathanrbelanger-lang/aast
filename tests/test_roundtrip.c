@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "aast.h"
 
 // Helper to read entire file into memory
@@ -37,65 +38,65 @@ int main(int argc, char** argv) {
 
     const char* input_file = argv[1];
     const char* output_file = argv[2];
+    clock_t start, end;
+    double time_taken;
 
-    printf("--- Blind Code Round-Trip Test ---\n");
+    printf("--- Blind Code Benchmark Test ---\n");
     printf("Target File: %s\n", input_file);
 
-    // 1. Read the blind file
     char* raw_code = read_file(input_file);
-    if (!raw_code) {
-        printf("FAILED: Could not read input file.\n");
-        return 1;
-    }
+    if (!raw_code) { printf("FAILED: Could not read input file.\n"); return 1; }
 
-    // 2. Package it into A-AST format with 0xFF Opaque Wrappers
-    // Format: 
-    // root:File:
-    //   payload:Code:\xFF[RAW_CODE]\xFF\n
-    
     const char* header = "root:File:\n  payload:Code:\xFF";
     const char* footer = "\xFF\n";
-    
     size_t wrapped_len = strlen(header) + strlen(raw_code) + strlen(footer);
     char* wrapped_aast_text = malloc(wrapped_len + 1);
-    
     strcpy(wrapped_aast_text, header);
     strcat(wrapped_aast_text, raw_code);
     strcat(wrapped_aast_text, footer);
 
-    // 3. Ingest the wrapped text into the A-AST Engine
-    // (Passing NULL for validator to isolate the parsing mechanism test)
-    printf("Ingesting into A-AST engine...\n");
+    // --- BENCHMARK 1: Ingestion & Hashing ---
+    start = clock();
     Node* root = aast_ingest_from_text(wrapped_aast_text, NULL);
+    end = clock();
     
     free(raw_code);
     free(wrapped_aast_text);
 
-    if (!root) {
-        printf("FAILED: A-AST Parser rejected the wrapped payload.\n");
-        return 1;
-    }
-    printf("SUCCESS: A-AST instantiated. Root Hash: %s\n", root->hash);
+    if (!root) { printf("FAILED: Parser rejected the payload.\n"); return 1; }
+    
+    time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
+    printf("\n[Metric] Ingestion, Parsing, & Merkle Hashing: %f seconds\n", time_taken);
+    printf("         Root Hash: %s\n", root->hash);
 
-    // 4. Query the engine to extract the payload
+    // --- BENCHMARK 2: Deep Path Query ---
+    start = clock();
     const char* path[] = {"payload"};
     const Node* extracted_node = aast_query_path(root, path, 1);
+    end = clock();
     
     if (!extracted_node || !extracted_node->payload) {
-        printf("FAILED: Could not query payload from A-AST.\n");
-        aast_release(root);
-        return 1;
+        printf("FAILED: Could not query payload.\n");
+        aast_release(root); return 1;
     }
+    
+    time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
+    printf("[Metric] O(1) Payload Query & Retrieval:       %f seconds\n", time_taken);
 
-    // 5. Write the extracted payload back to disk
-    printf("Extracting payload to: %s\n", output_file);
-    if (!write_file(output_file, extracted_node->payload)) {
+    // --- BENCHMARK 3: Extraction to Disk ---
+    start = clock();
+    int write_success = write_file(output_file, extracted_node->payload);
+    end = clock();
+
+    if (!write_success) {
         printf("FAILED: Could not write output file.\n");
-        aast_release(root);
-        return 1;
+        aast_release(root); return 1;
     }
 
-    printf("SUCCESS: Round-trip complete. Run 'diff' to verify absolute fidelity.\n");
+    time_taken = ((double)(end - start)) / CLOCKS_PER_SEC;
+    printf("[Metric] Extraction & Disk Write IO:           %f seconds\n\n", time_taken);
+
+    printf("SUCCESS: Benchmark complete. Run 'sha256sum' to verify.\n");
     
     aast_release(root);
     return 0;
