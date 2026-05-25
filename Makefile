@@ -83,6 +83,7 @@ clean:
 	rm -f tests/test_query_scale
 	rm -f tests/test_filetype
 	rm -f tests/test_nfc
+	rm -f tests/test_payload
 # --- Test Suite ---
 
 # Compile the Phase A test binary directly into the tests/ directory
@@ -180,3 +181,10 @@ tests/test_nfc: tests/test_nfc.c aast.c
 test_nfc: tests/test_nfc
 	@echo "--- Running UTF-8 NFC Engine Test ---"
 	valgrind --leak-check=full --show-leak-kinds=all ./tests/test_nfc
+# --- Code Payload (Opaque Wrapper) Tests ---
+tests/test_payload: tests/test_payload.c aast.c
+	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
+
+test_payload: tests/test_payload
+	@echo "--- Running Code Payload Ingestion Test ---"
+	valgrind --leak-check=full --show-leak-kinds=all ./tests/test_payload
