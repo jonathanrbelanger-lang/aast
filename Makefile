@@ -121,7 +121,7 @@ test_depth_sweep: tests/test_depth_limit
 	@./tests/test_depth_limit 10000     # Heavy deep tree
 	@./tests/test_depth_limit 50000     # Extreme deep tree
 # Compile the Query test binary
-tests/test_query: /tests/test_query.c aast.c
+tests/test_query: tests/test_query.c aast.c
 	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
 
 # Run the Query test under Valgrind
