@@ -11,4 +11,4 @@ tests/test_phase_a
 tests/*.log
 tests/test_key_limit
 # --- A-AST Query API Test Binaries ---
-main/tests/test_query
+tests/test_query
