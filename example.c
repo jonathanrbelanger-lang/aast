@@ -49,12 +49,13 @@ int main() {
     printf("A-AST Full Round-Trip Test\n");
     printf("========================================\n\n");
 
-    // --- STEP 1: Ingest Original Tree from Text ---
+  // --- STEP 1: Ingest Original Tree from Text ---
     printf("--- 1. Ingesting from ingest_data.txt ---\n");
     char* file_content = read_file_to_string("ingest_data.txt");
     if (!file_content) return 1;
 
-    Node* original_root = aast_ingest_from_text(file_content);
+    // UPDATE: Pass NULL to bypass NFC validation for the basic example
+    Node* original_root = aast_ingest_from_text(file_content, NULL);
     free(file_content);
     if (!original_root) {
         fprintf(stderr, "Ingestion failed.\n");
