@@ -515,7 +515,29 @@ static Node* convert_temp_to_aast(TempNode* t_node) {
     return new_node;
 }
 
-Node* aast_ingest_from_text(const char* text_data) {
+Node* aast_ingest_from_text(const char* text_data, const Node* nfc_validator) {
+    if (!text_data) return NULL;
+
+    // --- START OF EDGE VALIDATION ---
+    /*
+     * ARCHITECTURAL NOTATION: The Encoding Boundary
+     * We enforce UTF-8 NFC hygiene here at the outer edge (the ingestion parser), 
+     * rather than deep inside the core `create_node` constructor. 
+     * 
+     * While placing this inside `create_node` would mathematically harden the 
+     * data structure against raw C API misuse, it would impose an unacceptable 
+     * O(N) validation tax on every single node instantiated from already-trusted 
+     * sources (like disk deserialization). By validating the raw text blob exactly 
+     * once at the system boundary, we adhere to the "Minimal Overhead" constraint 
+     * defined in DESIGN.md. C-API consumers are trusted to maintain their own hygiene.
+     */
+    if (nfc_validator != NULL) {
+        if (!aast_validate_utf8_nfc(nfc_validator, text_data)) {
+            fprintf(stderr, "[A-AST Error] Ingestion failed: Text violates strict UTF-8 NFC encoding contract.\n");
+            return NULL;
+        }
+    }
+    // --- END OF EDGE VALIDATION ---
     TempNode* temp_root = calloc(1, sizeof(TempNode));
     if (!temp_root) return NULL;
     TempNode* current_parent = temp_root;
