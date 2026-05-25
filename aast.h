@@ -68,6 +68,18 @@ const Node* aast_query_path(const Node* root, const char* const* path, size_t pa
 typedef void (*AastChildCallback)(const char* key, const Node* child, void* context);
 void aast_iterate_children(const Node* parent, AastChildCallback callback, void* context);
 /**
+ * @brief Validates a string against a loaded UTF-8 NFC Validator A-AST.
+ * 
+ * Strictly rejects any characters flagged as "N" (No) or "M" (Maybe) in the 
+ * Unicode Consortium database, enforcing a mathematically perfect hygiene boundary.
+ * 
+ * @param validator_root The root node of the utf8_nfc.aast tree.
+ * @param text The null-terminated string to validate.
+ * @return 1 if the string is perfectly valid UTF-8 NFC, 0 if it is invalid.
+ */
+int aast_validate_utf8_nfc(const Node* validator_root, const char* text);
+
+/**
  * @brief O(1) query to find a child node by its string key.
  *
  * @param parent The parent node to search within.
