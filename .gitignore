@@ -12,3 +12,4 @@ tests/*.log
 tests/test_key_limit
 # --- A-AST Query API Test Binaries ---
 tests/test_query
+tests/test_query_scale
