@@ -122,6 +122,20 @@ test_depth_sweep: tests/test_depth_limit
 	@./tests/test_depth_limit 10000     # Heavy deep tree
 	@./tests/test_depth_limit 50000     # Extreme deep tree
 
+# --- Query API Tests ---
+
+# Compile the Query test binary
+tests/test_query: tests/test_query.c aast.c
+	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
+
+# Run the Query test under Valgrind
+test_query: tests/test_query
+	@echo "--- Running Query API Test ---"
+	valgrind --leak-check=full --show-leak-kinds=all ./tests/test_query
+
+
+# --- Query Scale Tests ---
+
 # Compile the Query Scale test binary
 tests/test_query_scale: tests/test_query_scale.c aast.c
 	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
