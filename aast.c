@@ -255,6 +255,17 @@ const Node* aast_query_path(const Node* root, const char* const* path, size_t pa
     return current;
 }
 
+void aast_iterate_children(const Node* parent, AastChildCallback callback, void* context) {
+    if (!parent || !callback) return;
+
+    ChildEntry *current_child, *tmp;
+    // Iterate through the O(1) hash table natively
+    HASH_ITER(hh, parent->children, current_child, tmp) {
+        // Pass the key, the weak node pointer, and the user's context state
+        callback(current_child->key, current_child->child_node, context);
+    }
+}
+
 Node* accrete_new_state(const Node* root, const char* const* path, size_t path_len, const char* new_payload) {
     if (!root || !path || path_len == 0) {
         return NULL;
