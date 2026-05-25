@@ -158,12 +158,13 @@ int aast_verify_integrity(const Node* root);
  * @brief Constructs an A-AST from a structured, indented text block.
  *
  * @param text_data A string containing the text representation to parse.
+ * @param nfc_validator Optional root node of the utf8_nfc.aast validation tree. If provided, enforces strict NFC hygiene.
  * @return A pointer to the root node of the newly ingested tree, or NULL on failure.
  */
-Node* aast_ingest_from_text(const char* text_data);
+Node* aast_ingest_from_text(const char* text_data, const Node* nfc_validator);
+
 /**
  * @brief Serializes an entire A-AST to a file in a leaves-first format.
- *
  * @param root The root node of the tree to serialize.
  * @param filename The path of the file to write to.
  * @return 0 on success, -1 on failure.
