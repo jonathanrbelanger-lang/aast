@@ -63,7 +63,10 @@ typedef struct Node {
  ** @return A pointer to the newly created Node, or NULL on allocation failure.
  */
 Node* create_node(const char* type, const char* payload, const AastChildInput* children_input, size_t child_count);
-
+const Node* aast_find_child_by_key(const Node* parent, const char* key);
+const Node* aast_query_path(const Node* root, const char* const* path, size_t path_len);
+typedef void (*AastChildCallback)(const char* key, const Node* child, void* context);
+void aast_iterate_children(const Node* parent, AastChildCallback callback, void* context);
 /**
  * @brief O(1) query to find a child node by its string key.
  *
