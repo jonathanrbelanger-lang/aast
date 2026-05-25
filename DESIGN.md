@@ -6,26 +6,24 @@ This document exists for contributors who want to understand not just what the
 A-AST does, but why every significant decision was made the way it was, and
 what demands the project makes on anyone who wants to extend it.
 
-Those demands are real. This project moves deliberately. Decisions that cannot
-be fully justified are deferred until they can be. Convenience features that
-violate the design contract are rejected regardless of how cleanly they are
-implemented. Open problems are stated as open problems, not papered over with
-plausible-sounding solutions. The pace reflects the weight of the promises the
-library makes — a cryptographic guarantee is not a thing you approximate.
+The project prioritizes long-term architectural stability over rapid feature accumulation. 
+Because cryptographic guarantees leave no room for approximation, design decisions are made 
+deliberately, and structural changes are deferred until their downstream impacts are fully 
+quantified. Core design contracts are strictly maintained; convenience features that introduce 
+boundary violations or hidden overhead are stepped back, ensuring the core remains optimized 
+solely for its intended workload. Open problems are documented transparently rather than 
+obscured behind speculative implementations. This measured pace reflects the weight of the 
+immutability promises the library makes.
 
-If that approach appeals to you, this document will give you everything you
-need to contribute meaningfully. If you find it frustrating, that is useful
-information, and there is no shame in it. The project's requirements are its
-own, not a judgment of yours. Contributors who are earlier in their journey
-with systems programming, memory management, or cryptographic data structures
-will find the codebase and this document a useful map of the terrain. Reading
-it carefully before touching the code is the expected starting point for
-everyone, regardless of experience level.
+For engineers interested in systems programming, low-level memory management, or content-addressable 
+architectures, this documentation and the accompanying codebase are designed to serve as a clear, 
+verifiable map of the terrain. Reviewing these foundational principles before writing code ensures 
+that all contributions align smoothly with the library’s design constraints.
 
-Low-effort contributions — PRs that add convenience without engaging with the
-contract, or that resolve open design problems without the supporting reasoning
-— will be reviewed against the standard visible in the codebase itself. The
-bar is not credentialism, it is rigor, and those are different things.
+To maintain the rigorous standards established throughout the codebase, contributions are evaluated 
+based on technical depth, mathematical consistency, and empirical backing. The boundary lines 
+enforced during code review are a reflection of architectural necessity, ensuring the structural 
+integrity of the data structure remains protected as the ecosystem evolves.
 
 ---
 
@@ -114,9 +112,11 @@ Nodes in the A-AST cannot be altered once created. This is not a convention or
 a guideline. It is enforced by the architecture. Modifying the state of the
 tree requires accreting a new state — constructing new nodes along the modified
 path while reusing unmodified branches via structural sharing. The previous
-state is preserved by construction. There is no mechanism for in-place
-mutation at this time, as that would invalidate the design of the A-AST.
-There are also no plans to design or develop that mechanism.
+state is preserved by construction. There is no mechanism for in-place mutation 
+within this architecture, as maintaining mutable nodes would invalidate the 
+node's hash, break the Merkle chain, and compromise the determinism of the 
+entire system. Consequently, immutability is treated as a foundational 
+constraint from which the rest of the framework is derived.
 
 This is the foundational constraint from which everything else follows. A
 mutable node would invalidate its hash, break the Merkle chain, and destroy
@@ -146,9 +146,12 @@ The A-AST is being optimized for machine ingestion. Human readability is a
 secondary concern, accommodated through a conditionally compiled debug 
 utility that is off by default and adds zero overhead to a production build. 
 This is not an aesthetic choice, but rather a direct expression of the 
-problem statement. Every byte of formatting that exists for human convenience 
-is additional overhead that does not benefit an agent, and as such, adds 
-complexity and cost, which is orthogonal to the core premise.
+problem statement. Every byte of formatting included for human convenience 
+introduces structural overhead that does not serve the agent consumer, 
+running counter to the project's optimization goals. To preserve a minimal 
+core footprint, the library focuses strictly on data structure integrity, 
+leaving the implementation of human-readable presentation layers to 
+downstream application developers.
 
 Organizations deploying the A-AST are responsible for their own human-readable
 output layer. The library provides the structure, and the design ditates that
@@ -157,7 +160,7 @@ we push these downstream tasks to them.
 ### Minimal Overhead as a First-Class Constraint
 
 Reducing overhead is not an optimization target to be addressed after the
-system is working, itt is a design constraint applied from the beginning. The
+system is working, it is a design constraint applied from the beginning. The
 transition from O(N) child arrays to O(1) hash table lookups in Phase 8.5 was
 not just a performance improvement, it was a requirement for a library whose 
 purpose includes efficient querying at scale.
@@ -165,10 +168,10 @@ purpose includes efficient querying at scale.
 This constraint has implications for contributors. The baseline overhead 
 contract is zero-tolerance. Any proposed convenience features must be 
 strictly opt-in, conditionally compiled, and demonstrate zero impact on 
-the baseline execution path. The library's contract is minimal and
-precise. Additions that broaden the contract require justification against the
-design philosophy, not just against the immediate use case. This protects the
-project from feature and scope creep. 
+the baseline execution path. The library’s contract remains intentionally 
+minimal and focused. To protect the system against feature and scope creep, 
+proposals that expand the API boundary are evaluated based on their alignment 
+with the core design philosophy rather than immediate, isolated use cases. 
 
 ### Determinism as a Promise
 
@@ -239,12 +242,11 @@ and changes to the parsing strategy require no modification to the C ABI.
 
 ## 4. Known Constraints and Open Design Problems
 
-The following problems are understood, honestly stated, and not yet fully
-resolved. These constraints require structural, mathematically sound 
-resolutions, not surface-level patches. Proposals addressing these areas 
-must prioritize empirical measurement over assumed fixes. An unresolved 
-problem stated clearly is more useful than a resolved problem stated 
-incorrectly.
+The following sections outline known architectural constraints and open 
+design problems. These challenges require structural, mathematically sound 
+resolutions backed by empirical measurement. Documenting these open frontiers 
+clearly ensures that future development addresses root causes rather than 
+superficial symptoms.
 
 ### The Code Payload Problem
 
@@ -256,13 +258,13 @@ The problem is the ingestion pipeline. The parser that constructs nodes from
 input must correctly identify where a payload begins and ends. A payload
 containing source code may contain characters — braces, brackets, newlines,
 key-value separators — that the parser would otherwise treat as structural
-delimiters. A misread boundary produces a silently malformed node whose hash
-is internally consistent but structurally incorrect. The integrity check
-passes, but the data is wrong.
-
-The suspected failure point is ingestion boundary detection, not hash
-computation. The leading candidate solution is a wrapping mechanism that
-signals to the parser that a payload should be treated as opaque. This
+delimiters. A misread boundary risks producing a malformed node whose 
+cryptographic hash is internally consistent but structurally unfaithful to 
+the source text. In this scenario, the Merkle integrity check would pass 
+despite the underlying data corruption. Current analysis suggests this is 
+an ingestion boundary detection challenge rather than a vulnerability in the 
+hashing context itself. The leading candidate solution is a wrapping mechanism 
+that signals to the parser that a payload should be treated as opaque. This
 introduces known tradeoffs: a potential memory leak if a node is emptied by a
 misread wrap boundary, and a layer of complexity at the root that propagates
 through every subsequent operation.
@@ -409,7 +411,8 @@ verify the integrity of its entire working memory in O(1) time. It can audit
 its own state transitions cryptographically. It can operate within a
 token-budget-conscious envelope by design rather than by post-hoc optimization.
 
-The multi-billion dollar problem of agent token cost at scale is not solved by
-optimizing formats that were designed for a different consumer. It is solved by
-building for the right consumer from the start. That is what this project is
-attempting to do, carefully, one verifiable phase at a time.
+Managing the compounding token costs of agentic deployment at scale requires a 
+fundamental re-evaluation of data format design. Rather than applying post-hoc 
+optimizations to formats originally built for human legibility, the A-AST 
+demonstrates the viability of data architectures engineered exclusively for 
+machine execution—developed deliberately, one verifiable phase at a time.
