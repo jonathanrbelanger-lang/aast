@@ -84,6 +84,7 @@ clean:
 	rm -f tests/test_filetype
 	rm -f tests/test_nfc
 	rm -f tests/test_payload
+	rm -f tests/test_roundtrip
 # --- Test Suite ---
 
 # Compile the Phase A test binary directly into the tests/ directory
@@ -188,3 +189,6 @@ tests/test_payload: tests/test_payload.c aast.c
 test_payload: tests/test_payload
 	@echo "--- Running Code Payload Ingestion Test ---"
 	valgrind --leak-check=full --show-leak-kinds=all ./tests/test_payload
+# --- Universal Code Round-Trip Harness ---
+tests/test_roundtrip: tests/test_roundtrip.c aast.c
+	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
