@@ -60,9 +60,20 @@ typedef struct Node {
  * @param payload The string data for the node.
  * @param children_input An array of AastChildInput structs.
  * @param child_count The number of children.
- * @return A pointer to the newly created Node, or NULL on allocation failure.
+ ** @return A pointer to the newly created Node, or NULL on allocation failure.
  */
 Node* create_node(const char* type, const char* payload, const AastChildInput* children_input, size_t child_count);
+
+/**
+ * @brief O(1) query to find a child node by its string key.
+ *
+ * @param parent The parent node to search within.
+ * @param key The exact string key to look for.
+ * @return A non-owning (weak) const pointer to the child node, or NULL if not found.
+ * @warning Do NOT call aast_release() on the returned pointer. Lifecycle is managed by the parent.
+ */
+const Node* aast_find_child_by_key(const Node* parent, const char* key);
+
 /**
  * @brief Decreases the reference count of a node and frees it if the count reaches zero.
  *
