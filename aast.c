@@ -557,6 +557,10 @@ int aast_serialize_to_file(const Node* root, const char* filename) {
     if (!root || !filename) return -1;
     FILE* fp = fopen(filename, "w");
     if (!fp) { perror("Failed to open file for serialization"); return -1; }
+    
+    // --- NEW: Write Formal Filetype Header ---
+    fprintf(fp, "AAST_V1|%s\n", root->hash);
+
     VisitedNode* visited_set = NULL;
     int result = serialize_recursive_helper(root, fp, &visited_set);
     fclose(fp);
@@ -579,6 +583,17 @@ Node* aast_deserialize_from_file(const char* filename) {
     size_t len = 0;
     ssize_t read;
     int error = 0;
+
+    // --- NEW: Read and validate the Formal Filetype Header ---
+    if ((read = getline(&line, &len, fp)) == -1) { free(line); fclose(fp); return NULL; }
+    if (strncmp(line, "AAST_V1|", 8) != 0) {
+        fprintf(stderr, "[A-AST Error] Invalid file signature. Not a valid .aast file.\n");
+        free(line); fclose(fp); return NULL;
+    }
+    char expected_root_hash[65];
+    strncpy(expected_root_hash, line + 8, 64);
+    expected_root_hash[64] = '\0';
+    // --- END NEW HEADER CHECK ---
 
     while ((read = getline(&line, &len, fp)) != -1) {
         // --- 1. Use safe pointers, do not modify the original line buffer ---
@@ -669,11 +684,18 @@ Node* aast_deserialize_from_file(const char* filename) {
         new_entry->node = new_node;
         HASH_ADD_STR(node_map, hash, new_entry);
         
-        root = new_node;
+root = new_node;
     }
     
-    // --- 6. Final Cleanup ---
-     if (error) {
+    // --- 6. Final Cleanup & Header Hash Enforcement ---
+    if (!error && root) {
+        if (strcmp(root->hash, expected_root_hash) != 0) {
+            fprintf(stderr, "[A-AST Error] File corrupted: Expected root %s, but got %s\n", expected_root_hash, root->hash);
+            error = 1;
+        }
+    }
+
+    if (error) {
         aast_release(root); // If we failed, release everything.
         root = NULL;
     }
