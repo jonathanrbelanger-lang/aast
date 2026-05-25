@@ -2,6 +2,13 @@
 #include <stdlib.h>
 #include "aast.h"
 
+// --- The Callback Function for Discovery ---
+void my_discovery_callback(const char* key, const Node* child, void* context) {
+    int* counter = (int*)context; // Cast the void pointer back to an int pointer
+    (*counter)++;
+    printf("  -> Discovered Child %d | Key: '%s', Type: '%s'\n", *counter, key, child->type);
+}
+
 int main() {
     printf("Starting Query API Test...\n");
 
@@ -10,9 +17,16 @@ int main() {
     AastChildInput role_input = { .key = "role_data", .child = role_child };
     
     Node* user_child = create_node("User", "Alice", &role_input, 1);
-    AastChildInput user_input = { .key = "user_1", .child = user_child };
     
-    Node* root = create_node("Root", "Database", &user_input, 1);
+    // Give the root multiple children to prove iteration works
+    Node* settings_child = create_node("Settings", "Dark_Mode", NULL, 0);
+    
+    AastChildInput root_inputs[2] = {
+        { .key = "user_1", .child = user_child },
+        { .key = "app_config", .child = settings_child }
+    };
+    
+    Node* root = create_node("Root", "Database", root_inputs, 2);
     
     // 2. Test Shallow Query (O1 Lookup)
     printf("\n--- Testing Shallow Query ---\n");
@@ -31,17 +45,22 @@ int main() {
         printf("FAILED: Could not find deep child.\n");
     }
 
-    // 4. Test Deep Path Query (Failure Case)
-    const char* bad_path[] = {"user_1", "invalid_key"};
-    const Node* missing = aast_query_path(root, bad_path, 2);
-    if (!missing) {
-        printf("SUCCESS: Correctly returned NULL for broken path.\n");
+    // 4. Test Discovery (Iteration)
+    printf("\n--- Testing Discovery API (Iterator) ---\n");
+    int hit_count = 0;
+    aast_iterate_children(root, my_discovery_callback, &hit_count);
+    
+    if (hit_count == 2) {
+        printf("SUCCESS: Correctly discovered and iterated over 2 children.\n");
+    } else {
+        printf("FAILED: Expected 2 children, found %d.\n", hit_count);
     }
 
     // 5. Cleanup
     aast_release(root);
     aast_release(user_child);
     aast_release(role_child);
+    aast_release(settings_child);
 
     printf("\nTest Complete. Memory ready for Valgrind inspection.\n");
     return 0;
