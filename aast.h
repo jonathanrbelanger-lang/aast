@@ -70,20 +70,29 @@ Node* create_node(const char* type, const char* payload, const AastChildInput* c
  * @param parent The parent node to search within.
  * @param key The exact string key to look for.
  * @return A non-owning (weak) const pointer to the child node, or NULL if not found.
- * @warning Do NOT call aast_release() on the returned pointer. Lifecycle is managed by the parent.
- */
-const Node* aast_find_child_by_key(const Node* parent, const char* key);
-
-/**
- * @brief Traverses a key-based path to retrieve a deeply nested node.
- *
- * @param root The root node to start the search from.
- * @param path An array of strings representing the key-based path.
- * @param path_len The number of elements in the path array.
- * @return A non-owning (weak) const pointer to the target node, or NULL if any step fails.
  * @warning Do NOT call aast_release() on the returned pointer. Lifecycle is managed by the tree.
  */
 const Node* aast_query_path(const Node* root, const char* const* path, size_t path_len);
+
+/**
+ * @brief Function pointer type for iterating over child nodes.
+ * @param key The string key of the current child.
+ * @param child The child node itself (non-owning pointer).
+ * @param context Opaque user data passed through from aast_iterate_children.
+ */
+typedef void (*AastChildCallback)(const char* key, const Node* child, void* context);
+
+/**
+ * @brief Iterates over all children of a node, executing a callback for each.
+ * 
+ * This function performs ZERO memory allocations, making it mathematically 
+ * immune to memory leaks. It is the architectural standard for discovery.
+ * 
+ * @param parent The node whose children will be iterated.
+ * @param callback The function to execute for each child.
+ * @param context An optional pointer to user-defined data (can be NULL).
+ */
+void aast_iterate_children(const Node* parent, AastChildCallback callback, void* context);
 
 /**
  * @brief Decreases the reference count of a node and frees it if the count reaches zero.
