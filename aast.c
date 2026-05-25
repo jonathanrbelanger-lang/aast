@@ -265,7 +265,47 @@ void aast_iterate_children(const Node* parent, AastChildCallback callback, void*
         callback(current_child->key, current_child->child_node, context);
     }
 }
-
+int aast_validate_utf8_nfc(const Node* validator_root, const char* text) {
+    if (!validator_root || !text) return 0;
+    
+    const unsigned char* p = (const unsigned char*)text;
+    while (*p != '\0') {
+        int char_len = 1;
+        // 1. Determine UTF-8 byte length (Basic UTF-8 structural validation)
+        if ((*p & 0x80) == 0x00) char_len = 1;
+        else if ((*p & 0xE0) == 0xC0) char_len = 2;
+        else if ((*p & 0xF0) == 0xE0) char_len = 3;
+        else if ((*p & 0xF8) == 0xF0) char_len = 4;
+        else return 0; // Invalid UTF-8 byte structure
+        
+        const Node* current = validator_root;
+        int found_in_trie = 1;
+        
+        // 2. Walk the A-AST Trie byte-by-byte for this character
+        for (int i = 0; i < char_len; i++) {
+            if (*(p + i) == '\0') return 0; // Unexpected EOF
+            
+            char hex_key[3];
+            sprintf(hex_key, "%02X", *(p + i));
+            
+            current = aast_find_child_by_key(current, hex_key);
+            if (!current) {
+                found_in_trie = 0;
+                break; // Path broken -> Not in exception list -> VALID NFC
+            }
+        }
+        
+        // 3. If we completed the path, check the rule payload
+        if (found_in_trie && current && current->payload) {
+            if (strcmp(current->payload, "N") == 0 || strcmp(current->payload, "M") == 0) {
+                return 0; // Strictly rejected by UCD rulebook
+            }
+        }
+        
+        p += char_len; // Advance to the next character
+    }
+    return 1;
+}
 Node* accrete_new_state(const Node* root, const char* const* path, size_t path_len, const char* new_payload) {
     if (!root || !path || path_len == 0) {
         return NULL;
