@@ -225,8 +225,20 @@ void aast_release(Node* node) {
 int aast_retain(Node* node) {
     if (node == NULL) return 0;
     if (node->ref_count == SIZE_MAX) return -1;
-    node->ref_count++;
+   node->ref_count++;
     return 0;
+}
+
+const Node* aast_find_child_by_key(const Node* parent, const char* key) {
+    if (!parent || !key) return NULL;
+    
+    ChildEntry* found_entry = NULL;
+    HASH_FIND_STR(parent->children, key, found_entry);
+    
+    if (found_entry) {
+        return found_entry->child_node;
+    }
+    return NULL;
 }
 
 Node* accrete_new_state(const Node* root, const char* const* path, size_t path_len, const char* new_payload) {
