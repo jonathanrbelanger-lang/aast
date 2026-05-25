@@ -79,7 +79,7 @@ clean:
 	@echo "==> Cleaning up build artifacts..."
 	rm -f $(TARGET) $(DEBUG_TARGET) $(LIB_OBJS) $(EXAMPLE_OBJS) aast.dat core
 	rm -f tests/test_phase_a tests/test_key_limit tests/test_depth_limit tests/*.log
-	rm -f main/tests/test_query
+	rm -f tests/test_query
 # --- Test Suite ---
 
 # Compile the Phase A test binary directly into the tests/ directory
@@ -121,10 +121,10 @@ test_depth_sweep: tests/test_depth_limit
 	@./tests/test_depth_limit 10000     # Heavy deep tree
 	@./tests/test_depth_limit 50000     # Extreme deep tree
 # Compile the Query test binary
-main/tests/test_query: main/tests/test_query.c aast.c
+tests/test_query: main/tests/test_query.c aast.c
 	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
 
 # Run the Query test under Valgrind
-test_query: main/tests/test_query
+test_query: tests/test_query
 	@echo "--- Running Query API Test ---"
-	valgrind --leak-check=full --show-leak-kinds=all ./main/tests/test_query
+	valgrind --leak-check=full --show-leak-kinds=all ./tests/test_query
