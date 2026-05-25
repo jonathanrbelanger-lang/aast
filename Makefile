@@ -81,6 +81,7 @@ clean:
 	rm -f tests/test_phase_a tests/test_key_limit tests/test_depth_limit tests/*.log
 	rm -f tests/test_query
 	rm -f tests/test_query_scale
+	rm -f tests/test_filetype
 # --- Test Suite ---
 
 # Compile the Phase A test binary directly into the tests/ directory
@@ -155,3 +156,10 @@ test_query_vertical: tests/test_query_scale
 	@./tests/test_query_scale vertical 30000
 	@./tests/test_query_scale vertical 50000
 	@./tests/test_query_scale vertical 100000
+# --- Filetype Formalization Tests ---
+tests/test_filetype: tests/test_filetype.c aast.c
+	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
+
+test_filetype: tests/test_filetype
+	@echo "--- Running Filetype Enforcement Test ---"
+	valgrind --leak-check=full --show-leak-kinds=all ./tests/test_filetype
