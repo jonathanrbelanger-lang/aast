@@ -85,6 +85,7 @@ clean:
 	rm -f tests/test_nfc
 	rm -f tests/test_payload
 	rm -f tests/test_roundtrip
+	rm -f tests/test_payload_curvature
 # --- Test Suite ---
 
 # Compile the Phase A test binary directly into the tests/ directory
@@ -192,3 +193,14 @@ test_payload: tests/test_payload
 # --- Universal Code Round-Trip Harness ---
 tests/test_roundtrip: tests/test_roundtrip.c aast.c
 	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
+# --- Payload Curvature Sweep ---
+tests/test_payload_curvature: tests/test_payload_curvature.c aast.c
+	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
+
+test_curvature_sweep: tests/test_payload_curvature
+	@echo "--- Beginning Payload Curvature Sweep (10MB -> 512MB) ---"
+	@./tests/test_payload_curvature 10
+	@./tests/test_payload_curvature 50
+	@./tests/test_payload_curvature 100
+	@./tests/test_payload_curvature 250
+	@./tests/test_payload_curvature 512
