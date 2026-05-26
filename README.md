@@ -67,7 +67,7 @@ To verify the fidelity of the `0xFF` opaque payload transport mechanism, a real-
 * **Extraction Fidelity:** 100% Mathematical Match. `sha256sum` verified the extracted bytes were identical to the source file, proving the out-of-band wrapping leaves zero footprint on the core data.
 
 ### Payload Curvature Analysis (The 512MB Ceiling)
-To verify that the ingestion and hashing algorithms degrade linearly (O(N)) without hidden exponential memory fragmentation bottlenecks, a synthetic volumetric sweep was conducted entirely in RAM, pushing the engine to its hard 512MB contiguous payload limit.
+To verify that the ingestion and hashing algorithms degrade linearly $O(N)$ without hidden exponential memory fragmentation bottlenecks, a synthetic volumetric sweep was conducted entirely in RAM, pushing the engine to its hard 512MB contiguous payload limit.
 
 | Payload Volume | Ingestion & SHA-256 Hashing | Deep Path Query (O1) | Fidelity |
 | :--- | :--- | :--- | :--- |
@@ -77,7 +77,7 @@ To verify that the ingestion and hashing algorithms degrade linearly (O(N)) with
 | **250 MB** | `0.803 seconds` | `~1 microsecond` | 100% |
 | **512 MB** | `1.647 seconds` | `~2 microseconds` | 100% |
 
-**Conclusion:** The engine maintains $O(N)$ linear ingestion scaling up to the half-gigabyte hard ceiling. Furthermore, the read-path latency ($O(1)$) remains entirely decoupled from the payload volume, guaranteeing microsecond retrieval times regardless of node size.
+**Conclusion:** The engine maintains $O(N)$ linear ingestion scaling up to the half-gigabyte hard ceiling. Furthermore, the read-path latency $O(1)$ remains entirely decoupled from the payload volume, guaranteeing microsecond retrieval times regardless of node size.
 
 ## Build Instructions
 
