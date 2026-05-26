@@ -554,16 +554,21 @@ Node* aast_ingest_from_text(const char* text_data, const Node* nfc_validator) {
         if (!colon2) goto error_cleanup;
         *colon2 = '\0';
 
-        // 4. Extract Payload (The State Machine)
+    // 4. Extract Payload (The State Machine)
         char* payload = colon2 + 1;
-        if ((unsigned char)*payload == 0xFF) {
+        
+        // Check for the 3-byte Start Marker: C0 C1 FF
+        if (strncmp(payload, "\xC0\xC1\xFF", 3) == 0) {
             // --- OPAQUE PAYLOAD MODE ---
-            payload++; // Skip opening 0xFF
-            char* end_ff = strchr(payload, 0xFF);
-            if (!end_ff) goto error_cleanup; // Missing closing 0xFF
-            *end_ff = '\0'; // Strip closing 0xFF
+            payload += 3; // Skip opening marker
             
-            p = end_ff + 1;
+            // Search for the 3-byte End Marker: FF C1 C0
+            char* end_marker = strstr(payload, "\xFF\xC1\xC0");
+            if (!end_marker) goto error_cleanup; // Missing closing marker
+            
+            *end_marker = '\0'; // Strip closing marker
+            
+            p = end_marker + 3; // Move pointer past the end marker
             // Advance parser to the next line
             while (*p != '\n' && *p != '\0') p++;
             if (*p == '\n') p++;
@@ -577,7 +582,6 @@ Node* aast_ingest_from_text(const char* text_data, const Node* nfc_validator) {
                 p = payload + strlen(payload); // End of file
             }
         }
-
         // 5. NFC Hygiene Boundary (Validate the stripped components)
         if (nfc_validator != NULL) {
             if (!aast_validate_utf8_nfc(nfc_validator, key) ||
