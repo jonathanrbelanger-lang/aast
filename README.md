@@ -67,7 +67,7 @@ To verify the fidelity of the `0xFF` opaque payload transport mechanism, a real-
 * **Extraction Fidelity:** 100% Mathematical Match. `sha256sum` verified the extracted bytes were identical to the source file, proving the out-of-band wrapping leaves zero footprint on the core data.
 
 ### Payload Curvature Analysis (The 512MB Ceiling)
-To verify that the ingestion and hashing algorithms degrade linearly ($O(N)$) without hidden exponential memory fragmentation bottlenecks, a synthetic volumetric sweep was conducted entirely in RAM, pushing the engine to its hard 512MB contiguous payload limit.
+To verify that the ingestion and hashing algorithms degrade linearly (O(N)) without hidden exponential memory fragmentation bottlenecks, a synthetic volumetric sweep was conducted entirely in RAM, pushing the engine to its hard 512MB contiguous payload limit.
 
 | Payload Volume | Ingestion & SHA-256 Hashing | Deep Path Query (O1) | Fidelity |
 | :--- | :--- | :--- | :--- |
