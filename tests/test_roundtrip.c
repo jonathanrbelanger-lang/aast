@@ -47,8 +47,8 @@ int main(int argc, char** argv) {
     char* raw_code = read_file(input_file);
     if (!raw_code) { printf("FAILED: Could not read input file.\n"); return 1; }
 
-    const char* header = "root:File:\n  payload:Code:\xFF";
-    const char* footer = "\xFF\n";
+const char* header = "root:File:\n  payload:Code:\xC0\xC1\xFF";
+    const char* footer = "\xFF\xC1\xC0\n";
     size_t wrapped_len = strlen(header) + strlen(raw_code) + strlen(footer);
     char* wrapped_aast_text = malloc(wrapped_len + 1);
     strcpy(wrapped_aast_text, header);
