@@ -10,6 +10,9 @@
 #define AAST_MAX_TYPE_LEN    16    // Standard fixed-width semantic tag limit
 #define AAST_MAX_PAYLOAD_SIZE    536870912   // 512 MB chunking threshold for heap stability
 
+// --- Reserved Structural Types ---
+#define AAST_TYPE_LINK "AAST_LINK" // Denotes a node whose payload is a hash pointing to another .aast file
+
 // ----------------------------------------------------------------------------
 // Public Data Structure Definition
 // ----------------------------------------------------------------------------
