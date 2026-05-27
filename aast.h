@@ -90,6 +90,17 @@ int aast_validate_utf8_nfc(const Node* validator_root, const char* text);
  * @return A non-owning (weak) const pointer to the child node, or NULL if not found.
  * @warning Do NOT call aast_release() on the returned pointer. Lifecycle is managed by the tree.
  */
+const Node* aast_find_child_by_key(const Node* parent, const char* key);
+
+/**
+ * @brief Traverses a key-based path to retrieve a deeply nested node.
+ *
+ * @param root The root node to start the search from.
+ * @param path An array of strings representing the key-based path.
+ * @param path_len The number of elements in the path array.
+ * @return A non-owning (weak) const pointer to the target node, or NULL if any step fails.
+ * @warning Do NOT call aast_release() on the returned pointer. Lifecycle is managed by the tree.
+ */
 const Node* aast_query_path(const Node* root, const char* const* path, size_t path_len);
 
 /**
@@ -111,6 +122,20 @@ typedef void (*AastChildCallback)(const char* key, const Node* child, void* cont
  * @param context An optional pointer to user-defined data (can be NULL).
  */
 void aast_iterate_children(const Node* parent, AastChildCallback callback, void* context);
+
+/**
+ * @brief Safely resolves an AAST_LINK, executes a query callback on the loaded tree, 
+ *        and mathematically guarantees the tree is flushed from RAM afterward.
+ * 
+ * Enforces the "Iron Gate" integrity check: the hash of the loaded file MUST match
+ * the hash stored in the link_node's payload, or the file is immediately rejected.
+ * 
+ * @param link_node The node of type "AAST_LINK".
+ * @param callback The function to execute against the loaded chunk (receives a weak pointer).
+ * @param context Opaque user state passed to the callback.
+ * @return 1 on success, 0 on failure (hash mismatch, missing file, or invalid node type).
+ */
+int aast_execute_in_link_context(const Node* link_node, void (*callback)(const Node* loaded_root, void* context), void* context);
 
 /**
  * @brief Decreases the reference count of a node and frees it if the count reaches zero.
