@@ -728,7 +728,7 @@ Node* aast_deserialize_from_file(const char* filename) {
     ssize_t read;
     int error = 0;
 
-    // --- NEW: Read and validate the Formal Filetype Header ---
+    // --- Read and validate the Formal Filetype Header ---
     if ((read = getline(&line, &len, fp)) == -1) { free(line); fclose(fp); return NULL; }
     if (strncmp(line, "AAST_V1|", 8) != 0) {
         fprintf(stderr, "[A-AST Error] Invalid file signature. Not a valid .aast file.\n");
@@ -737,13 +737,9 @@ Node* aast_deserialize_from_file(const char* filename) {
     char expected_root_hash[65];
     strncpy(expected_root_hash, line + 8, 64);
     expected_root_hash[64] = '\0';
-    // --- END NEW HEADER CHECK ---
 
     while ((read = getline(&line, &len, fp)) != -1) {
-        // --- 1. Use safe pointers, do not modify the original line buffer ---
         char* current = line;
-
-        // --- 2. Extract tokens by finding delimiters manually ---
         char* token_end;
 
         // HASH
@@ -762,27 +758,23 @@ Node* aast_deserialize_from_file(const char* filename) {
         type[token_end - current] = '\0';
         current = token_end + 1;
         
-       // PAYLOAD
+        // PAYLOAD (In-Place Null Termination Fix)
         token_end = strchr(current, '|');
         if (!token_end) { error = 1; break; }
         char* payload_len_str = current;
         char* payload_str = strchr(payload_len_str, ':');
         if (!payload_str || payload_str > token_end) { error = 1; break; }
-        payload_str++; // move past ':'
+        payload_str++; 
         
-        // --- THE FIX: O(1) In-Place Null Termination ---
-        // Instead of allocating a Variable Length Array on the stack, 
-        // we isolate the payload string directly inside the heap buffer.
         size_t payload_len = token_end - payload_str;
-        *token_end = '\0'; 
-        
-        current = token_end + 1; // Advance past the delimiter
+        *token_end = '\0'; // In-place termination, NO stack array allocated!
+        current = token_end + 1;
 
-        // --- 3. Parse Children and Build Input Array ---
+        // CHILDREN
         AastChildInput* children_inputs = NULL;
         size_t child_count = 0;
         char* children_field = current;
-        if (strchr(children_field, '\n')) *strchr(children_field, '\n') = '\0'; // Safely strip newline
+        if (strchr(children_field, '\n')) *strchr(children_field, '\n') = '\0'; 
 
         if (strlen(children_field) > 0) {
             char* children_copy = strdup(children_field);
@@ -813,17 +805,8 @@ Node* aast_deserialize_from_file(const char* filename) {
              break;
         }
 
-        // --- 4. Create Node & Verify ---
-        // Pass the in-place payload string directly to the constructor
+        // CREATE NODE
         Node* new_node = create_node(type, payload_len > 0 ? payload_str : NULL, children_inputs, child_count);
-
-        for(size_t i = 0; i < child_count; i++) free((void*)children_inputs[i].key);
-        free(children_inputs);
-             break;
-        }
-
-        // --- 4. Create Node & Verify ---
-        Node* new_node = create_node(type, payload[0] ? payload : NULL, children_inputs, child_count);
 
         for(size_t i = 0; i < child_count; i++) free((void*)children_inputs[i].key);
         free(children_inputs);
@@ -833,17 +816,17 @@ Node* aast_deserialize_from_file(const char* filename) {
             aast_release(new_node); error = 1; break;
         }
         
-        // --- 5. Add to Map ---
+        // MAP ADDITION
         NodeMapEntry* new_entry = malloc(sizeof(NodeMapEntry));
         if(!new_entry) { aast_release(new_node); error = 1; break; }
         strcpy(new_entry->hash, new_node->hash);
         new_entry->node = new_node;
         HASH_ADD_STR(node_map, hash, new_entry);
         
-root = new_node;
+        root = new_node;
     }
     
-    // --- 6. Final Cleanup & Header Hash Enforcement ---
+    // --- Final Cleanup & Header Hash Enforcement ---
     if (!error && root) {
         if (strcmp(root->hash, expected_root_hash) != 0) {
             fprintf(stderr, "[A-AST Error] File corrupted: Expected root %s, but got %s\n", expected_root_hash, root->hash);
@@ -852,13 +835,12 @@ root = new_node;
     }
 
     if (error) {
-        aast_release(root); // If we failed, release everything.
+        aast_release(root); 
         root = NULL;
     }
 
     NodeMapEntry *current_entry, *tmp;
     if (root) {
-
         HASH_FIND_STR(node_map, root->hash, current_entry);
         if (current_entry) {
             HASH_DEL(node_map, current_entry);
