@@ -762,18 +762,21 @@ Node* aast_deserialize_from_file(const char* filename) {
         type[token_end - current] = '\0';
         current = token_end + 1;
         
-        // PAYLOAD
+       // PAYLOAD
         token_end = strchr(current, '|');
         if (!token_end) { error = 1; break; }
         char* payload_len_str = current;
         char* payload_str = strchr(payload_len_str, ':');
         if (!payload_str || payload_str > token_end) { error = 1; break; }
         payload_str++; // move past ':'
+        
+        // --- THE FIX: O(1) In-Place Null Termination ---
+        // Instead of allocating a Variable Length Array on the stack, 
+        // we isolate the payload string directly inside the heap buffer.
         size_t payload_len = token_end - payload_str;
-        char payload[payload_len + 1];
-        strncpy(payload, payload_str, payload_len);
-        payload[payload_len] = '\0';
-        current = token_end + 1;
+        *token_end = '\0'; 
+        
+        current = token_end + 1; // Advance past the delimiter
 
         // --- 3. Parse Children and Build Input Array ---
         AastChildInput* children_inputs = NULL;
@@ -807,6 +810,15 @@ Node* aast_deserialize_from_file(const char* filename) {
         if (error) {
              for(size_t i = 0; i < child_count; i++) free((void*)children_inputs[i].key);
              free(children_inputs);
+             break;
+        }
+
+        // --- 4. Create Node & Verify ---
+        // Pass the in-place payload string directly to the constructor
+        Node* new_node = create_node(type, payload_len > 0 ? payload_str : NULL, children_inputs, child_count);
+
+        for(size_t i = 0; i < child_count; i++) free((void*)children_inputs[i].key);
+        free(children_inputs);
              break;
         }
 
