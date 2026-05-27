@@ -302,10 +302,50 @@ int aast_validate_utf8_nfc(const Node* validator_root, const char* text) {
             }
         }
         
-        p += char_len; // Advance to the next character
+       p += char_len; // Advance to the next character
     }
     return 1;
 }
+
+int aast_execute_in_link_context(const Node* link_node, void (*callback)(const Node* loaded_root, void* context), void* context) {
+    // 1. Validate inputs and ensure this is actually a link node
+    if (!link_node || !callback || strcmp(link_node->type, AAST_TYPE_LINK) != 0 || !link_node->payload) {
+        return 0;
+    }
+
+    // 2. Construct the filename from the payload hash (e.g., "83c9...e109.aast")
+    size_t hash_len = strlen(link_node->payload);
+    char* filename = malloc(hash_len + 6); // +5 for ".aast" +1 for '\0'
+    if (!filename) return 0;
+    sprintf(filename, "%s.aast", link_node->payload);
+
+    // 3. The Isolated Load (Quarantine Zone)
+    Node* loaded_sub_tree = aast_deserialize_from_file(filename);
+    free(filename);
+
+    if (!loaded_sub_tree) {
+        return 0; // File missing or structurally corrupted
+    }
+
+    // 4. The Iron Gate Verification
+    // (aast_deserialize_from_file already checks the header, but we MUST check 
+    // that the loaded root matches the SPECIFIC hash requested by the parent link).
+    if (strcmp(loaded_sub_tree->hash, link_node->payload) != 0) {
+        fprintf(stderr, "[A-AST Error] Iron Gate Failure: AAST_LINK hash mismatch.\n");
+        aast_release(loaded_sub_tree);
+        return 0;
+    }
+
+    // 5. Context-Managed Execution
+    // We pass a const (weak) pointer. The Agent cannot free it or mutate it.
+    callback(loaded_sub_tree, context);
+
+    // 6. Guaranteed Memory Flush
+    aast_release(loaded_sub_tree);
+    
+    return 1;
+}
+
 Node* accrete_new_state(const Node* root, const char* const* path, size_t path_len, const char* new_payload) {
     if (!root || !path || path_len == 0) {
         return NULL;
