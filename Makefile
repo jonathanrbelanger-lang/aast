@@ -86,6 +86,7 @@ clean:
 	rm -f tests/test_payload
 	rm -f tests/test_roundtrip
 	rm -f tests/test_payload_curvature
+	rm -f tests/test_link
 # --- Test Suite ---
 
 # Compile the Phase A test binary directly into the tests/ directory
@@ -204,3 +205,10 @@ test_curvature_sweep: tests/test_payload_curvature
 	@./tests/test_payload_curvature 100
 	@./tests/test_payload_curvature 250
 	@./tests/test_payload_curvature 512
+# --- AAST_LINK Integrity Tests ---
+tests/test_link: tests/test_link.c aast.c
+	$(CC) $(CFLAGS) -I. $^ -o $@ $(LDLIBS)
+
+test_link: tests/test_link
+	@echo "--- Running AAST_LINK Cross-File Integrity Test ---"
+	valgrind --leak-check=full --show-leak-kinds=all ./tests/test_link
