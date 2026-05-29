@@ -181,21 +181,25 @@ def ingest_from_string(str text_data, wrap_opaque=False):
 # --- System Ingestion Factory ---
 def ingest_from_string(str text_data, wrap_opaque=False):
     cdef bytes b_text
+    cdef bytes b_wrapped
     cdef const char* c_text
     cdef Node* loaded_root
     
     if wrap_opaque:
-        # 1. Strip trailing newlines/whitespace to prevent marker offset errors
+        # 1. Strip trailing newlines/whitespace
         clean_text = text_data.strip()
         
         # 2. Normalize to NFC (Strict Encoding Boundary)
         text_nfc = unicodedata.normalize('NFC', clean_text)
         
-        # 3. Package with directional Opaque Wrappers ONLY
-        packaged_text = f"\xC0\xC1\xFF{text_nfc}\xFF\xC1\xC0"
-        b_text = packaged_text.encode('utf-8')
-        c_text = <const char*>b_text
+        # 3. Encode the valid text to bytes FIRST
+        b_text = text_nfc.encode('utf-8')
         
+        # 4. Concatenate raw bytes (Preventing Python from altering the illegal markers)
+        b_wrapped = b"\xC0\xC1\xFF" + b_text + b"\xFF\xC1\xC0"
+        c_text = <const char*>b_wrapped
+        
+        # Execute C-Core Fast-Path
         with nogil:
             loaded_root = aast_ingest_opaque_node("Code", c_text, NULL)
             
