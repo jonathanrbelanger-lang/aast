@@ -192,6 +192,20 @@ int aast_verify_integrity(const Node* root);
 Node* aast_ingest_from_text(const char* text_data, const Node* nfc_validator);
 
 /**
+ * @brief Instantiates a single Node from an opaque, wrapped payload, bypassing the text parser.
+ * 
+ * Safely strips the \xC0\xC1\xFF directional transport wrappers, enforces UTF-8 NFC 
+ * hygiene (if a validator is provided), and constructs an immutable node. This provides 
+ * a zero-collision ingestion path for complex source code and multi-line data.
+ * 
+ * @param type The semantic type of the node (e.g., "Code").
+ * @param wrapped_payload The raw payload enveloped in \xC0\xC1\xFF and \xFF\xC1\xC0 markers.
+ * @param nfc_validator Optional. The root of the utf8_nfc.aast tree to enforce encoding hygiene.
+ * @return A pointer to the newly instantiated Node, or NULL on failure.
+ */
+Node* aast_ingest_opaque_node(const char* type, const char* wrapped_payload, const Node* nfc_validator);
+
+/**
  * @brief Serializes an entire A-AST to a file in a leaves-first format.
  * @param root The root node of the tree to serialize.
  * @param filename The path of the file to write to.
