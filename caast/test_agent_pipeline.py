@@ -1,6 +1,8 @@
 import caast
 import time
 import hashlib
+import sys
+import os
 
 def run_benchmark(filepath):
     print("==================================================")
@@ -8,7 +10,11 @@ def run_benchmark(filepath):
     print("==================================================\n")
     
     # 1. Read Target File
-    with open(filepath, 'r') as f:
+    if not os.path.exists(filepath):
+        print(f"FAILED: File not found -> {filepath}")
+        return
+
+    with open(filepath, 'r', encoding='utf-8') as f:
         original_code = f.read()
         
     file_size_kb = len(original_code) / 1024
@@ -22,9 +28,20 @@ def run_benchmark(filepath):
     # ==========================================
     start = time.perf_counter()
     
-    # This handles NFC Normalization, Opaque Wrapping, C-Parsing, and Merkle Hashing
-    tree = caast.ingest_from_string(original_code, wrap_opaque=True)
+    # Force Python to flush its output buffers so any C-level printf/fprintf 
+    # executes immediately and appears in the correct chronological order.
+    sys.stdout.flush()
+    sys.stderr.flush()
     
+    try:
+        # This handles NFC Normalization, Opaque Wrapping, C-Parsing, and Merkle Hashing
+        tree = caast.ingest_from_string(original_code, wrap_opaque=True)
+    except Exception as e:
+        print(f"\n[!] CYTHON EXCEPTION CAUGHT: {e}")
+        print("-> The C-Core parser (aast_ingest_from_text) returned NULL.")
+        print("-> Look directly above this message for any [A-AST Error] printed by C.")
+        return
+
     end = time.perf_counter()
     ingest_time = end - start
     print(f"\n[Metric] Python->C Ingestion & Merkle Hash: {ingest_time:.6f} seconds")
@@ -51,7 +68,7 @@ def run_benchmark(filepath):
     # ==========================================
     start = time.perf_counter()
     
-    # The property accessor automatically strips the \xC0\xC1\xFF markers
+    # The property accessor automatically strips the opaque markers
     extracted_code = extracted_node.payload
     
     end = time.perf_counter()
@@ -63,6 +80,20 @@ def run_benchmark(filepath):
     # ==========================================
     extracted_hash = hashlib.sha256(extracted_code.encode('utf-8')).hexdigest()
     
+    if original_hash == extracted_hash:
+        print("SUCCESS: 100% Data Fidelity Preserved Across C/Python Boundary.")
+        print(f"         Original SHA-256:  {original_hash}")
+        print(f"         Extracted SHA-256: {extracted_hash}")
+    else:
+        print("FAILED: Data Corruption detected at the boundary!")
+        print(f"         Expected: {original_hash}")
+        print(f"         Got:      {extracted_hash}")
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Usage: python3 test_agent_pipeline.py <path_to_python_file>")
+    else:
+        run_benchmark(sys.argv[1])    
     if original_hash == extracted_hash:
         print("SUCCESS: 100% Data Fidelity Preserved Across C/Python Boundary.")
         print(f"         Original SHA-256:  {original_hash}")
