@@ -658,8 +658,9 @@ Node* aast_ingest_from_text(const char* text_data, const Node* nfc_validator) {
     free_temp_tree(temp_root);
     free(to_free);
     return final_root;
-
+// --- Replace this line to force to only write during debug printing to remove overhead in production ---
 error_cleanup:
+    fprintf(stderr, "[A-AST Parser Debug] Parser aborted! Failed near character: '%c' (Hex: %02X)\n", *p ? *p : 'E', *p);
     free_temp_tree(temp_root);
     free(to_free);
     return NULL;
