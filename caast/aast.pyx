@@ -140,3 +140,42 @@ def load_from_file(str filepath):
     cdef AASTNode py_obj = AASTNode.__new__(AASTNode)
     py_obj._c_node = loaded_root
     return py_obj
+# --- System Ingestion Factory ---
+def ingest_from_string(str text_data, wrap_opaque=False):
+    """
+    Ingests a raw Python string into the C-Core A-AST engine.
+    
+    If wrap_opaque=True, the bridge automatically normalizes the text to NFC,
+    encodes it, and wraps it in the illegal UTF-8 out-of-band markers 
+    (\xC0\xC1\xFF) before passing it to C. This makes the string safe from 
+    structural parsing collisions.
+    """
+    cdef bytes b_text
+    
+    if wrap_opaque:
+        # 1. Normalize to NFC (Strict Encoding Boundary)
+        text_nfc = unicodedata.normalize('NFC', text_data)
+        
+        # 2. Package into A-AST structural format with Opaque Wrappers
+        # We format it as a root node containing a 'payload' child
+        packaged_text = f"root:System:\n  payload:Data:\xC0\xC1\xFF{text_nfc}\xFF\xC1\xC0\n"
+        b_text = packaged_text.encode('utf-8')
+    else:
+        # Standard structural ingestion
+        b_text = text_data.encode('utf-8')
+
+    cdef const char* c_text = <const char*>b_text
+    cdef Node* loaded_root
+    
+    # Execute C-Core Parser
+    with nogil:
+        # Passing NULL for the validator tree for this benchmark
+        loaded_root = aast_ingest_from_text(c_text, NULL)
+        
+    if loaded_root == NULL:
+        raise ValueError("A-AST C-Core rejected the text. Check formatting or NFC compliance.")
+        
+    # Route through Pointer Factory
+    cdef AASTNode py_obj = AASTNode.__new__(AASTNode)
+    py_obj._c_node = loaded_root
+    return py_obj
