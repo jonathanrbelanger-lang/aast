@@ -2,7 +2,7 @@
 
 import unicodedata
 from libc cimport stdlib
-from aast cimport Node, aast_retain, aast_release, aast_find_child_by_key, aast_query_path, aast_iterate_children, aast_deserialize_from_file, aast_ingest_from_text
+from aast cimport Node, aast_retain, aast_release, aast_find_child_by_key, aast_query_path, aast_iterate_children, aast_deserialize_from_file, aast_ingest_from_text, aast_ingest_opaque_node
 # --- Constants for Opaque Transport ---
 cdef bytes OPAQUE_START = b"\xC0\xC1\xFF"
 cdef bytes OPAQUE_END   = b"\xFF\xC1\xC0"
@@ -170,6 +170,49 @@ def ingest_from_string(str text_data, wrap_opaque=False):
     with nogil:
         # Passing NULL for the validator tree for this benchmark
         loaded_root = aast_ingest_from_text(c_text, NULL)
+        
+    if loaded_root == NULL:
+        raise ValueError("A-AST C-Core rejected the text. Check formatting or NFC compliance.")
+        
+    # Route through Pointer Factory
+    cdef AASTNode py_obj = AASTNode.__new__(AASTNode)
+    py_obj._c_node = loaded_root
+    return py_obj
+# --- System Ingestion Factory ---
+def ingest_from_string(str text_data, wrap_opaque=False):
+    """
+    Ingests a raw Python string into the C-Core A-AST engine.
+    
+    If wrap_opaque=True, the bridge automatically normalizes the text to NFC,
+    encodes it, wraps it in directional markers, and utilizes the C-Core's 
+    Opaque Fast-Path to completely bypass structural parsing.
+    """
+    cdef bytes b_text
+    cdef const char* c_text
+    cdef Node* loaded_root
+    
+    if wrap_opaque:
+        # 1. Normalize to NFC (Strict Encoding Boundary)
+        text_nfc = unicodedata.normalize('NFC', text_data)
+        
+        # 2. Package with directional Opaque Wrappers ONLY
+        packaged_text = f"\xC0\xC1\xFF{text_nfc}\xFF\xC1\xC0"
+        b_text = packaged_text.encode('utf-8')
+        c_text = <const char*>b_text
+        
+        # Execute C-Core Fast-Path (Bypassing indentation parser entirely)
+        with nogil:
+            # Passing "Code" as the semantic type, and NULL for the validator tree
+            loaded_root = aast_ingest_opaque_node("Code", c_text, NULL)
+            
+    else:
+        # Standard structural ingestion
+        b_text = text_data.encode('utf-8')
+        c_text = <const char*>b_text
+        
+        # Execute Standard C-Core Parser
+        with nogil:
+            loaded_root = aast_ingest_from_text(c_text, NULL)
         
     if loaded_root == NULL:
         raise ValueError("A-AST C-Core rejected the text. Check formatting or NFC compliance.")
