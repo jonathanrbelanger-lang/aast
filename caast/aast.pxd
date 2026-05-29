@@ -30,31 +30,31 @@ cdef extern from "../aast.h":
         const char* key
         Node* child
 
-    # --- Memory Lifecycle API ---
-    void aast_release(Node* node)
-    int aast_retain(Node* node)
+   # --- Memory Lifecycle API ---
+    void aast_release(Node* node) nogil
+    int aast_retain(Node* node) nogil
 
     # --- Constructor & Mutation API ---
-    Node* create_node(const char* type, const char* payload, const AastChildInput* children_input, size_t child_count)
-    Node* accrete_new_state(const Node* root, const char* const* path, size_t path_len, const char* new_payload)
+    Node* create_node(const char* type, const char* payload, const AastChildInput* children_input, size_t child_count) nogil
+    Node* accrete_new_state(const Node* root, const char* const* path, size_t path_len, const char* new_payload) nogil
 
     # --- Query API (Returning Weak Pointers) ---
-    const Node* aast_find_child_by_key(const Node* parent, const char* key)
-    const Node* aast_query_path(const Node* root, const char* const* path, size_t path_len)
+    const Node* aast_find_child_by_key(const Node* parent, const char* key) nogil
+    const Node* aast_query_path(const Node* root, const char* const* path, size_t path_len) nogil
 
     # --- Discovery & IoC Callbacks ---
-    ctypedef void (*AastChildCallback)(const char* key, const Node* child, void* context)
-    void aast_iterate_children(const Node* parent, AastChildCallback callback, void* context)
+    ctypedef void (*AastChildCallback)(const char* key, const Node* child, void* context) nogil
+    void aast_iterate_children(const Node* parent, AastChildCallback callback, void* context) nogil
     
-    int aast_execute_in_link_context(const Node* link_node, void (*callback)(const Node* loaded_root, void* context), void* context)
+    int aast_execute_in_link_context(const Node* link_node, void (*callback)(const Node* loaded_root, void* context), void* context) nogil
 
     # --- Persistence API ---
-    int aast_serialize_to_file(const Node* root, const char* filename)
-    Node* aast_deserialize_from_file(const char* filename)
+    int aast_serialize_to_file(const Node* root, const char* filename) nogil
+    Node* aast_deserialize_from_file(const char* filename) nogil
 
     # --- Ingestion & Validation API ---
-    int aast_validate_utf8_nfc(const Node* validator_root, const char* text)
-    Node* aast_ingest_from_text(const char* text_data, const Node* nfc_validator)
+    int aast_validate_utf8_nfc(const Node* validator_root, const char* text) nogil
+    Node* aast_ingest_from_text(const char* text_data, const Node* nfc_validator) nogil
 
     # --- Integrity API ---
-    int aast_verify_integrity(const Node* root)
+    int aast_verify_integrity(const Node* root) nogil
