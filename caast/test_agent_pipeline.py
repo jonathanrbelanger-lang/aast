@@ -48,16 +48,17 @@ def run_benchmark(filepath):
     print(f"         Root Node C-Hash: {tree.hash}")
     
     # ==========================================
-    # BENCHMARK 2: Deep Query & Pointer Factory
+    # BENCHMARK 2: Payload Extraction & Stripping
     # ==========================================
     start = time.perf_counter()
     
-    # Ask the C-Core to find the payload, elevate the pointer, and wrap it in Python
-    extracted_node = tree.query_path(["payload"])
+    # Because we used wrap_opaque=True, the returned tree IS the opaque node.
+    # The property accessor automatically strips the opaque markers invisibly!
+    extracted_code = tree.payload
     
     end = time.perf_counter()
-    query_time = end - start
-    print(f"[Metric] C->Python Deep Query & Elevation:  {query_time:.6f} seconds")
+    extract_time = end - start
+    print(f"[Metric] Payload Decoding & Marker Strip:   {extract_time:.6f} seconds\n")
     
     if not extracted_node:
         print("FAILED: Could not query payload back from C-Core.")
