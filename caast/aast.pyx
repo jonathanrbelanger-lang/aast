@@ -2,8 +2,7 @@
 
 import unicodedata
 from libc cimport stdlib
-from aast cimport Node, aast_retain, aast_release, aast_find_child_by_key, aast_query_path, aast_iterate_children, aast_deserialize_from_file
-
+from aast cimport Node, aast_retain, aast_release, aast_find_child_by_key, aast_query_path, aast_iterate_children, aast_deserialize_from_file, aast_ingest_from_text
 # --- Constants for Opaque Transport ---
 cdef bytes OPAQUE_START = b"\xC0\xC1\xFF"
 cdef bytes OPAQUE_END   = b"\xFF\xC1\xC0"
