@@ -655,16 +655,57 @@ Node* aast_ingest_from_text(const char* text_data, const Node* nfc_validator) {
         final_root = convert_temp_to_aast(temp_root->children[0]);
     }
     
-    free_temp_tree(temp_root);
+free_temp_tree(temp_root);
     free(to_free);
     return final_root;
-// --- Replace this line to force to only write during debug printing to remove overhead in production ---
+
 error_cleanup:
     fprintf(stderr, "[A-AST Parser Debug] Parser aborted! Failed near character: '%c' (Hex: %02X)\n", *p ? *p : 'E', *p);
     free_temp_tree(temp_root);
     free(to_free);
     return NULL;
 }
+
+Node* aast_ingest_opaque_node(const char* type, const char* wrapped_payload, const Node* nfc_validator) {
+    if (!type || !wrapped_payload) return NULL;
+
+    size_t wrapped_len = strlen(wrapped_payload);
+    if (wrapped_len < 6) return NULL; // Must be at least large enough to hold both 3-byte markers
+
+    // 1. Verify directional transport markers
+    if (strncmp(wrapped_payload, "\xC0\xC1\xFF", 3) != 0 || 
+        strncmp(wrapped_payload + wrapped_len - 3, "\xFF\xC1\xC0", 3) != 0) {
+        fprintf(stderr, "[A-AST Error] Opaque ingestion failed: Missing or invalid transport markers.\n");
+        return NULL;
+    }
+
+    // 2. Allocate a secure C-owned heap buffer to prevent mutating Python/Host memory
+    char* pure_payload = strdup(wrapped_payload);
+    if (!pure_payload) return NULL;
+
+    // 3. Isolate the pure payload by adjusting pointers and null-terminating
+    char* payload_start = pure_payload + 3; // Skip opening marker
+    char* payload_end = pure_payload + wrapped_len - 3; // Find closing marker
+    *payload_end = '\0'; // Strip closing marker
+
+    // 4. NFC Hygiene Boundary
+    if (nfc_validator != NULL) {
+        if (!aast_validate_utf8_nfc(nfc_validator, payload_start)) {
+            fprintf(stderr, "[A-AST Error] Opaque ingestion failed: Payload violates UTF-8 NFC encoding contract.\n");
+            free(pure_payload);
+            return NULL;
+        }
+    }
+
+    // 5. Instantiate Immutable Node
+    Node* new_node = create_node(type, payload_start, NULL, 0);
+    
+    // Cleanup the temporary secure buffer
+    free(pure_payload);
+    
+    return new_node;
+}
+
 // --- Persistence API ---
 static int serialize_recursive_helper(const Node* node, FILE* fp, VisitedNode** visited_set) {
     if (!node) return 0;
