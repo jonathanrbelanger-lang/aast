@@ -45,12 +45,15 @@ The project is being developed in discrete, verifiable phases.
 * **Phase 9.2: Formal `.aast` Filetype & Bootstrapped Validation**
     * Formalized the `.aast` format, anchoring it with a cryptographic header (`AAST_V1|[ROOT_HASH]`) that instantly rejects file tampering upon load.
     * Built a Python extractor to download the Unicode Consortium's UTF-8 NFC ruleset and compiled it into a 14,000-rule A-AST Trie (`utf8_nfc.aast`). The C-engine uses its own data structure to strictly validate incoming text hygiene in O(1) time.
-* **Phase 9.3: Opaque Payload Transport (Current State)**
-    * Solved the "Code Payload" parser collision problem using out-of-band signaling. Raw source code (Python, C, JSON) is wrapped in the illegal UTF-8 byte (`0xFF`). The parser suspends structural rules, safely buffers the complex code, and strips the wrappers before hashing, guaranteeing zero-collision ingestion.
+* **Phase 9.3: Opaque Payload Transport**
+    * Addressed parser collision using out-of-band signaling. Raw source code is wrapped in directionally-locked, illegal UTF-8 byte sequences (`\xC0\xC1\xFF` and `\xFF\xC1\xC0`). The C-parser provides a fast-path that isolates the payload, suspends structural rules, and strips the wrappers before hashing, ensuring safe ingestion of unescaped syntax.
+* **Phase 11.0: Cython Read Bridge (Current State)**
+    * Developed a native Python extension module (`caast`) to safely map the C-Core's manual reference counting to Python's garbage collector via a internal Pointer Factory.
+    * Enforces a strict read-only interface through explicit methods. The bridge manages UTF-8 NFC normalization and opaque wrapper application invisibly at the interface boundary, shielding the Agent from raw byte management.
 
 ## Empirical Constraints & Performance Metrics
 
-To guarantee sub-millisecond execution times and absolute system runtime stability, the A-AST explicitly enforces the following empirically mapped boundary rules. Input parameters violating these thresholds are rejected instantly before any heap or stack space is allocated.
+To guarantee sub-millisecond execution times and runtime stability, the A-AST explicitly enforces the following empirically mapped boundary rules. Input parameters violating these thresholds are rejected instantly before any heap or stack space is allocated.
 
 | Constraint Vector | Hard Target Limit | Failure Mode Preempted | Testing Methodology |
 | :--- | :--- | :--- | :--- |
@@ -60,11 +63,12 @@ To guarantee sub-millisecond execution times and absolute system runtime stabili
 | **Max Traversal Depth** | `35,000 Layers` | Stack frame overflow and uncatchable `SIGSEGV` core dumps. | High-density vertical spine accretion tests mapping the 208-byte x86_64 stack frame ceiling. |
 
 ### Real-World Data Benchmarks (The Blind Code Test)
-To verify the fidelity of the `0xFF` opaque payload transport mechanism, a real-world Python script (`sw_attention_core.py`) containing deep indentation, newlines, and unescaped colons was fed through the Universal Round-Trip Harness.
-* **Payload Size:** 6.2 KB *(Note: While physically small, this size is sufficient to prove the parser state-machine correctly navigates hundreds of illegal delimiters without triggering false node-breaks. Volumetric bounds up to 512MB are tested separately).*
-* **Ingestion, Edge-Validation, & SHA-256 Hashing:** `~3.2 milliseconds`
+To verify the fidelity of the opaque payload transport mechanism, a real-world Python script (`sw_attention_core.py`) containing deep indentation, newlines, and unescaped colons was fed through the ingestion pipelines.
+* **Payload Size:** 6.2 KB *(Note: While physically small, this size is sufficient to prove the parser state-machine correctly navigates hundreds of illegal delimiters without triggering false node-breaks).*
+* **Native C-Core Ingestion & SHA-256 Hashing:** `~3.2 milliseconds`
+* **Python->C Cython Bridge Fast-Path:** `~31 microseconds` *(Includes Python object instantiation, NFC normalization, directional wrapper application, C-parsing, and Merkle hashing).*
 * **Deep Path Query & Retrieval:** `~1.0 microsecond`
-* **Extraction Fidelity:** 100% Mathematical Match. `sha256sum` verified the extracted bytes were identical to the source file, proving the out-of-band wrapping leaves zero footprint on the core data.
+* **Extraction Fidelity:** 100% Mathematical Match. `sha256sum` verified the extracted bytes were identical to the source file.
 
 ### Payload Curvature Analysis (The 512MB Ceiling)
 To verify that the ingestion and hashing algorithms degrade linearly $O(N)$ without hidden exponential memory fragmentation bottlenecks, a synthetic volumetric sweep was conducted entirely in RAM, pushing the engine to its hard 512MB contiguous payload limit.
@@ -77,18 +81,18 @@ To verify that the ingestion and hashing algorithms degrade linearly $O(N)$ with
 | **250 MB** | `0.803 seconds` | `~1 microsecond` | 100% |
 | **512 MB** | `1.647 seconds` | `~2 microseconds` | 100% |
 
-**Conclusion:** The engine maintains $O(N)$ linear ingestion scaling up to the half-gigabyte hard ceiling. Furthermore, the read-path latency $O(1)$ remains entirely decoupled from the payload volume, guaranteeing microsecond retrieval times regardless of node size.
+**Conclusion:** The engine maintains $O(N)$ linear ingestion scaling up to the half-gigabyte hard ceiling. Furthermore, the read-path latency $O(1)$ remains decoupled from the payload volume, providing steady retrieval times regardless of node size.
 
 ### Distributed Chunking & Lazy-Loading (`AAST_LINK`)
 To bypass OS file size limits and physical RAM constraints, the A-AST supports native decentralized storage via `AAST_LINK` nodes, which point to external `.aast` files. To prevent AI Agents from accidentally triggering Out-Of-Memory (OOM) crashes during full-table scans across thousands of linked files, resolution is strictly handled via an Inversion-of-Control (IoC) Context-Managed Callback, ensuring active RAM is automatically flushed the instant a chunk query completes.
 
 **Bare-Metal Benchmark (Non-Valgrind):**
 A synthetic test simulating an Agent resolving and querying a 50 MB chunk, followed by a sequential full-table scan thrashing 100 separate 50 MB chunks.
-* **50MB Single Link Resolution:** `~147 milliseconds` *(Includes Disk I/O, Parsing, and the "Iron Gate" SHA-256 cryptographic verification).*
+* **50MB Single Link Resolution:** `~147 milliseconds` *(Includes Disk I/O, In-place Parsing, and the "Iron Gate" SHA-256 cryptographic verification).*
 * **5 Gigabyte Sequential Full-Table Scan (100 Iterations):** `~14.9 seconds`.
 * **Peak RAM Usage During 5GB Scan:** `< 60 MB`.
 
-**Conclusion:** The Context-Managed Callback architecture structurally prevents memory bleed. The engine can sequentially parse, hash, and query Terabytes of cryptographically verified, distributed `.aast` files at a rate of roughly `~335 MB/s` on standard consumer hardware, within the host system's RAM constraints regardless of total dataset size.
+**Conclusion:** The Context-Managed Callback architecture structurally prevents memory bleed. The engine can sequentially parse, hash, and query distributed `.aast` files at a rate of roughly `~335 MB/s` on standard consumer hardware, operating within the host system's RAM constraints regardless of total dataset size.
 
 ## Build Instructions
 
@@ -111,6 +115,15 @@ make
 # Run the standard production binary through the memory sandbox
 valgrind --leak-check=full ./example_aast
 
+# --- Python Cython Bridge (Phase 11) ---
+
+# Install build dependencies
+pip3 install Cython setuptools python3-dev
+
+# Compile the native Python extension module
+cd caast
+python3 setup.py build_ext --inplace
+
 # --- Specialized Stress-Testing Suites ---
 
 # Run the Query API tests (O1 lookups and iterators)
@@ -129,7 +142,7 @@ make build_ucd
 # Run the NFC validation engine test against the generated ruleset
 make test_nfc
 
-# Run the Opaque Code Payload test (0xFF out-of-band parsing)
+# Run the Opaque Code Payload test (Directional out-of-band parsing)
 make test_payload
 
 # Run the Blind Code Round-Trip Harness against a target file
@@ -138,4 +151,3 @@ make tests/test_roundtrip
 
 # Remove all build artifacts, binary targets, and Valgrind logs
 make clean
-```
