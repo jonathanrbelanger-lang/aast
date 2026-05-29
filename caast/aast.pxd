@@ -52,9 +52,10 @@ cdef extern from "../aast.h":
     int aast_serialize_to_file(const Node* root, const char* filename) nogil
     Node* aast_deserialize_from_file(const char* filename) nogil
 
-    # --- Ingestion & Validation API ---
+# --- Ingestion & Validation API ---
     int aast_validate_utf8_nfc(const Node* validator_root, const char* text) nogil
     Node* aast_ingest_from_text(const char* text_data, const Node* nfc_validator) nogil
+    Node* aast_ingest_opaque_node(const char* type, const char* wrapped_payload, const Node* nfc_validator) nogil
 
     # --- Integrity API ---
     int aast_verify_integrity(const Node* root) nogil
